@@ -1,0 +1,22 @@
+*.classpath
+*.project
+*.iml
+*.factorypath
+target
+.idea/
+*.log
+docs
+logs
+*.DS_Store
+
+# 本地/服务器密钥，不要提交
+.env
+deploy/.env
+config/application-local.yml
+config/application-local.yaml
+
+# 数据库完整导出包含真实用户数据，使用 database/ 下的初始化脚本代替
+database/code_guardian_full_dump.sql
+
+# 本地 Semgrep 输出
+output_*.json

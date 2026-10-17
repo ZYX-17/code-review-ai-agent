@@ -1,0 +1,15 @@
+target
+.git
+.gitignore
+.github
+.idea
+.vscode
+*.iml
+*.log
+logs
+docs
+output_*.json
+deploy/.env
+.env
+config/application-local.yml
+config/application-local.yaml

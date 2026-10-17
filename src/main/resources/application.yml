@@ -1,0 +1,157 @@
+spring:
+  application:
+    name: code-review-ai-agent
+
+  # 默认使用 local 配置；生产环境通过 SPRING_PROFILES_ACTIVE=prod 覆盖
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  # Web配置
+  web:
+    resources:
+      add-mappings: false  # 禁用默认的静态资源映射，避免404错误
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+  # Thymeleaf配置
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+    cache: false  # 开发环境禁用缓存
+    servlet:
+      content-type: text/html
+
+  # Jackson配置（支持Java 8时间类型）
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false  # 不使用时间戳，使用ISO-8601格式
+    time-zone: UTC
+
+  # 数据源公共配置，连接地址/账号/密码在 application-local.yml 或 application-prod.yml
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA公共配置
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+        use_sql_comments: true
+
+  # Redis公共配置，连接地址/密码在 application-local.yml 或 application-prod.yml
+  data:
+    redis:
+      timeout: 20000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+
+  # Spring AI公共配置，API Key/Base URL 在 application-local.yml 或 application-prod.yml
+  ai:
+    enabled: false
+    embedding:
+      transformer:
+        enabled: false
+    # OpenAI配置
+    openai:
+      embedding:
+        enabled: false # Disable OpenAI embedding to use Transformers
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-3.5-turbo}
+          temperature: 0.3
+          max-tokens: 4000
+
+    # Transformers (Local) 配置
+    transformers:
+      embedding:
+        enabled: false
+        cache:
+          enabled: true
+          directory: ${user.home}/.cache/spring-ai/transformers
+
+    # Ollama配置（用于本地DeepSeek）
+    ollama:
+      embedding:
+        enabled: false  # 默认禁用Ollama Embedding，防止未启动Ollama时报错，优先使用OpenAI
+      chat:
+        options:
+          model: ${OLLAMA_MODEL:deepseek-r1:8b}
+          temperature: 0.3
+          num-predict: 4000
+      # 超时配置（本地模型需要更长时间）
+      client:
+        connect-timeout: 300s
+        read-timeout: 300s
+
+    # Vector Store配置
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 384 # Transformers default (all-MiniLM-L6-v2)
+        initialize-schema: true
+
+    # Qwen配置（使用OpenAI兼容接口）
+    qwen:
+      chat:
+        options:
+          model: ${QWEN_MODEL:qwen3-max}
+          temperature: 0.3
+          max-tokens: 4000
+
+app:
+  rag:
+    vectorize-on-startup: false
+
+# Sa-Token配置
+sa-token:
+  # token名称 (同时也是cookie名称)
+  token-name: satoken
+  # token有效期，单位s 默认30天, -1代表永不过期
+  timeout: 86400
+  # 是否允许同一账号并发登录 (为true时允许一起登录, 为false时新登录挤掉旧登录)
+  is-concurrent: true
+  # 在多人登录同一账号时，是否共用一个token (为true时所有登录共用一个token, 为false时每次登录新建一个token)
+  is-share: true
+  # token风格
+  token-style: uuid
+  # 是否输出操作日志
+  is-log: false
+
+# MinIO公共配置，endpoint/access-key/secret-key 在 application-local.yml 或 application-prod.yml
+minio:
+  bucket-name: ${MINIO_BUCKET:code-review}
+
+# 服务器配置
+server:
+  port: ${SERVER_PORT:7003}
+  tomcat:
+    max-swallow-size: 100MB
+  servlet:
+    context-path: /
+
+gitcode:
+  api:
+    base-url: https://api.gitcode.com/api/v5
+
+djl:
+  cache:
+    dir: ${DJL_CACHE_DIR:${user.home}/.cache/djl}
