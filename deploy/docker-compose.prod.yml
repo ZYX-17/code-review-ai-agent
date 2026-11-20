@@ -76,6 +76,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       GITCODE_TOKEN: ${GITCODE_TOKEN:-}
+      API_TOKEN: ${API_TOKEN:-}
       JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx2g}
       DJL_CACHE_DIR: /tmp/djl-cache
     extra_hosts:

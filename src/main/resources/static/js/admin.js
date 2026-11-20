@@ -229,6 +229,12 @@ function renderUserTable(users) {
         editBtn.textContent = '编辑';
         editBtn.onclick = () => editUser(user.id);
         actionDiv.appendChild(editBtn);
+
+        const resetPwdBtn = document.createElement('button');
+        resetPwdBtn.className = 'action-btn edit-btn';
+        resetPwdBtn.textContent = '重置密码';
+        resetPwdBtn.onclick = () => resetUserPassword(user.id, user.username);
+        actionDiv.appendChild(resetPwdBtn);
         
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'action-btn delete-btn';
@@ -356,6 +362,43 @@ async function editUser(userId) {
     } catch (error) {
         console.error('加载用户失败:', error);
         alert('加载用户信息失败，请稍后重试');
+    }
+}
+
+// 管理员重置用户密码
+async function resetUserPassword(userId, username) {
+    const newPassword = prompt(`为用户 ${username} 设置新密码（6-32 位）：`);
+    if (newPassword === null) {
+        return;
+    }
+    if (newPassword.length < 6 || newPassword.length > 32) {
+        alert('密码长度必须在 6-32 位之间');
+        return;
+    }
+    if (!confirm(`确认重置用户 ${username} 的密码？`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/admin/users/api/${userId}/password`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ newPassword })
+        });
+
+        if (response.ok) {
+            alert('密码已重置');
+            return;
+        }
+
+        if (handleUnauthorized(response)) return;
+        const error = await response.json().catch(() => ({}));
+        alert(error.message || error.error || '重置密码失败，请稍后重试');
+    } catch (error) {
+        console.error('重置密码失败:', error);
+        alert('重置密码失败，请稍后重试');
     }
 }
 

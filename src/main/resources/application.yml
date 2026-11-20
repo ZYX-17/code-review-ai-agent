@@ -2,6 +2,12 @@ spring:
   application:
     name: code-review-ai-agent
 
+  # 默认未启用任何 EmbeddingModel；排除 PgVector 自动配置，避免启动失败。
+  # 如需向量检索，请启用 transformers embedding 后删除本排除项。
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.autoconfigure.vectorstore.pgvector.PgVectorStoreAutoConfiguration
+
   # 默认使用 local 配置；生产环境通过 SPRING_PROFILES_ACTIVE=prod 覆盖
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
@@ -120,6 +126,10 @@ spring:
 app:
   rag:
     vectorize-on-startup: false
+  # 外部集成（CI/CD、Webhook）共享令牌，生产环境通过 API_TOKEN 环境变量注入。
+  # 未配置时 /api/v1/cicd/** 与 /api/v1/webhook/** 会拒绝所有请求。
+  integration:
+    api-token: ${API_TOKEN:}
 
 # Sa-Token配置
 sa-token:

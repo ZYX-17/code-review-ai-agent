@@ -2,6 +2,7 @@ package com.codeguardian.config;
 
 import cn.dev33.satoken.interceptor.SaInterceptor;
 import cn.dev33.satoken.stp.StpUtil;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -12,9 +13,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * <p>统一拦截敏感路径进行登录校验：
  * /admin/**、/api/**（排除认证接口）、/review/**。
  * 静态资源与健康检查等公共端点放行。</p>
+ *
+ * <p>CI/CD 与 Webhook 接口不使用登录态，改由
+ * {@link IntegrationAuthInterceptor} 校验共享令牌。</p>
  */
 @Configuration
+@RequiredArgsConstructor
 public class SaTokenConfig implements WebMvcConfigurer {
+
+    private final IntegrationAuthInterceptor integrationAuthInterceptor;
 
     /**
      * 注册Sa-Token拦截器并声明路径匹配规则
@@ -23,6 +30,10 @@ public class SaTokenConfig implements WebMvcConfigurer {
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // 外部集成接口：校验 X-API-Token / X-Gitlab-Token，而不是登录态
+        registry.addInterceptor(integrationAuthInterceptor)
+        .addPathPatterns("/api/v1/cicd/**", "/api/v1/webhook/**");
+
         registry.addInterceptor(new SaInterceptor(handler -> {
             StpUtil.checkLogin();
         }))
@@ -30,6 +41,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
         .excludePathPatterns(
                 "/login",
                 "/api/auth/**",
+                "/api/v1/cicd/**",
+                "/api/v1/webhook/**",
                 "/logout",
                 "/actuator/**",
                 "/error",

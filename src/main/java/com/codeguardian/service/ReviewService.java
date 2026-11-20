@@ -241,13 +241,14 @@ public class ReviewService {
                         return reviewSingleFile(relativePath, content, request);
                     } catch (Exception e) {
                         log.error("读取文件失败: {}", filePath, e);
-                        return new ArrayList<Finding>();
+                        throw new RuntimeException("读取文件失败: " + filePath + " - " + e.getMessage(), e);
                     }
                 }))
                 .collect(Collectors.toList());
         }
 
         List<Finding> allFindings = new ArrayList<>();
+        List<String> reviewErrors = new ArrayList<>();
         for (Future<List<Finding>> future : futures) {
             try {
                 List<Finding> findings = future.get();
@@ -255,12 +256,19 @@ public class ReviewService {
                     allFindings.addAll(findings);
                 }
             } catch (Exception e) {
-                log.error("获取审查结果失败", e);
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                String reason = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+                reviewErrors.add(reason);
+                log.error("获取审查结果失败: {}", reason, cause);
             }
         }
-        
+
         saveFindings(task, allFindings);
-        log.info("并行审查完成: taskId={}, findingsCount={}", task.getId(), allFindings.size());
+        log.info("并行审查完成: taskId={}, findingsCount={}, failedFiles={}", task.getId(), allFindings.size(), reviewErrors.size());
+        if (!reviewErrors.isEmpty()) {
+            String summary = reviewErrors.stream().distinct().limit(3).collect(Collectors.joining("; "));
+            throw new RuntimeException("部分文件审查失败（" + reviewErrors.size() + " 个文件）: " + summary);
+        }
     }
 
     private List<Finding> reviewSingleFile(String relativePath, String content, ReviewRequestDTO request) {
@@ -275,7 +283,7 @@ public class ReviewService {
             return fileFindings;
         } catch (Exception e) {
             log.error("文件审查失败: {}", relativePath, e);
-            return new ArrayList<>();
+            throw new RuntimeException("文件审查失败 " + relativePath + ": " + e.getMessage(), e);
         }
     }
     
@@ -431,6 +439,7 @@ public class ReviewService {
                 .reviewType(ReviewTypeEnum.fromValue(task.getReviewType()).name())
                 .scope(task.getScope())
                 .createdAt(task.getCreatedAt())
+                .errorMessage(task.getErrorMessage())
                 .totalFindings(findings.size())
                 .criticalCount(severityCounts.getOrDefault(SeverityEnum.CRITICAL.getValue(), 0))
                 .highCount(severityCounts.getOrDefault(SeverityEnum.HIGH.getValue(), 0))

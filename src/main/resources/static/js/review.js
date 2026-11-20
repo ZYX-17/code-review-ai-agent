@@ -2647,13 +2647,18 @@ async function pollTaskStatus(taskId) {
                     await loadFindings(taskId);
                     return;
                 } else if (task.status === 'FAILED') {
-                    throw new Error(task.errorMessage || '审查任务执行失败');
+                    const taskError = new Error(task.errorMessage || '审查任务执行失败');
+                    taskError.isTaskFailure = true;
+                    throw taskError;
                 }
             }
         } catch (error) {
+            // 任务明确失败时直接抛出，保留后端返回的具体原因
+            if (error.isTaskFailure) {
+                throw error;
+            }
             console.warn('轮询任务状态出错:', error);
-            // 如果是 FAILED 抛出的错误，直接抛出，不再重试
-            if (error.message && (error.message.includes('审查任务执行失败') || error.message.includes('超时'))) {
+            if (error.message && error.message.includes('超时')) {
                 throw error;
             }
         }

@@ -1,5 +1,6 @@
 package com.codeguardian.controller;
 
+import com.codeguardian.annotation.OperationLogRecord;
 import com.codeguardian.dto.*;
 import com.codeguardian.entity.Role;
 import com.codeguardian.service.RoleService;
@@ -81,6 +82,7 @@ public class RoleController {
     @PostMapping("/api")
     @ResponseBody
     @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "角色管理", action = "创建角色")
     public ResponseEntity<RoleDTO> createRole(@Valid @RequestBody RoleCreateDTO createDTO) {
         RoleDTO role = roleService.createRole(createDTO);
         return ResponseEntity.ok(role);
@@ -91,28 +93,34 @@ public class RoleController {
      */
     @PutMapping("/api/{id}")
     @ResponseBody
+    @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "角色管理", action = "更新角色")
     public ResponseEntity<RoleDTO> updateRole(
             @PathVariable("id") Long id,
             @Valid @RequestBody RoleUpdateDTO updateDTO) {
         RoleDTO role = roleService.updateRole(id, updateDTO);
         return ResponseEntity.ok(role);
     }
-    
+
     /**
      * 删除角色（API）
      */
     @DeleteMapping("/api/{id}")
     @ResponseBody
+    @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "角色管理", action = "删除角色")
     public ResponseEntity<Void> deleteRole(@PathVariable("id") Long id) {
         roleService.deleteRole(id);
         return ResponseEntity.ok().build();
     }
-    
+
     /**
      * 分配权限（API）
      */
     @PostMapping("/api/{id}/permissions")
     @ResponseBody
+    @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "角色管理", action = "分配权限")
     public ResponseEntity<Void> assignPermissions(
             @PathVariable("id") Long id,
             @RequestBody List<String> permissionCodes) {

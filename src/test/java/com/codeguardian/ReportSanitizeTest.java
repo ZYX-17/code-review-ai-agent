@@ -1,6 +1,6 @@
 package com.codeguardian;
 
-import com.codeguardian.controller.ReportController;
+import com.codeguardian.service.pdf.PdfHtmlConverter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assertions;
 import java.lang.reflect.Constructor;
@@ -28,14 +28,14 @@ class ReportSanitizeTest {
                 "<div>####:2</div>" +
                 "<div>描述：建议明确导入所需的每个类</div>";
 
-        // 通过反射调用 ReportController.cleanMarkdownInHtml
-        Constructor<ReportController> ctor = ReportController.class.getDeclaredConstructor(com.codeguardian.service.ReportService.class);
+        // 通过反射调用 PdfHtmlConverter.cleanMarkdownInHtml
+        Constructor<PdfHtmlConverter> ctor = PdfHtmlConverter.class.getDeclaredConstructor();
         ctor.setAccessible(true);
-        ReportController controller = ctor.newInstance((Object) null);
+        PdfHtmlConverter converter = ctor.newInstance();
 
-        Method method = ReportController.class.getDeclaredMethod("cleanMarkdownInHtml", String.class);
+        Method method = PdfHtmlConverter.class.getDeclaredMethod("cleanMarkdownInHtml", String.class);
         method.setAccessible(true);
-        String cleaned = (String) method.invoke(controller, html);
+        String cleaned = (String) method.invoke(converter, html);
 
         // 验证不再出现以#开头的标题或 ####:数字 的模式
         Assertions.assertFalse(cleaned.contains("#中危"));

@@ -179,7 +179,20 @@ public class UserService {
         log.info("更新用户成功: id={}", id);
         return convertToDTO(user);
     }
-    
+
+    /**
+     * 管理员重置指定用户的密码
+     */
+    @Transactional
+    public void resetPassword(Long id, String newPassword) {
+        User user = userRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("用户不存在"));
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        log.info("管理员重置用户密码: id={}, username={}", id, user.getUsername());
+    }
+
     /**
      * 删除用户
      */

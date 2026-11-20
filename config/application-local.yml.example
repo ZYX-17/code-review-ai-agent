@@ -49,3 +49,9 @@ gitcode:
 logging:
   level:
     com.codeguardian: DEBUG
+
+# 外部集成（CI/CD、Webhook）共享令牌；不需要外部集成时留空。
+# CI/CD 请求头 X-API-Token，GitLab/GitCode Webhook Secret 使用同一个值。
+app:
+  integration:
+    api-token: ""

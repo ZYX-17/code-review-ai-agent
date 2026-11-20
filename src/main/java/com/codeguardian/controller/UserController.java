@@ -1,5 +1,6 @@
 package com.codeguardian.controller;
 
+import com.codeguardian.annotation.OperationLogRecord;
 import com.codeguardian.dto.*;
 import com.codeguardian.service.UserService;
 import jakarta.validation.Valid;
@@ -94,6 +95,7 @@ public class UserController {
     @PostMapping("/api")
     @ResponseBody
     @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "用户管理", action = "创建用户")
     public ResponseEntity<UserDTO> createUser(@Valid @RequestBody UserCreateDTO createDTO) {
         UserDTO user = userService.createUser(createDTO);
         return ResponseEntity.ok(user);
@@ -107,11 +109,28 @@ public class UserController {
     @PutMapping("/api/{id}")
     @ResponseBody
     @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "用户管理", action = "更新用户")
     public ResponseEntity<UserDTO> updateUser(
             @PathVariable("id") Long id,
             @Valid @RequestBody UserUpdateDTO updateDTO) {
         UserDTO user = userService.updateUser(id, updateDTO);
         return ResponseEntity.ok(user);
+    }
+
+    /**
+     * 重置用户密码（API）
+     *
+     * <p>需`ADMIN`权限。</p>
+     */
+    @PutMapping("/api/{id}/password")
+    @ResponseBody
+    @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "用户管理", action = "重置密码")
+    public ResponseEntity<Void> resetPassword(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody ResetPasswordDTO resetPasswordDTO) {
+        userService.resetPassword(id, resetPasswordDTO.getNewPassword());
+        return ResponseEntity.ok().build();
     }
     
     /**
@@ -122,6 +141,7 @@ public class UserController {
     @DeleteMapping("/api/{id}")
     @ResponseBody
     @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "用户管理", action = "删除用户")
     public ResponseEntity<Void> deleteUser(@PathVariable("id") Long id) {
         userService.deleteUser(id);
         return ResponseEntity.ok().build();

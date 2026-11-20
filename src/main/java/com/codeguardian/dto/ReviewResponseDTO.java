@@ -32,6 +32,11 @@ public class ReviewResponseDTO {
     private String status;
 
     /**
+     * 错误信息（任务失败时）
+     */
+    private String errorMessage;
+
+    /**
      * 审查类型
      */
     private String reviewType;

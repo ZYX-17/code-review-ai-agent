@@ -56,6 +56,10 @@
                             <i class="fas fa-key"></i>
                             <span>权限列表</span>
                         </a>
+                        <a th:if="${canAdmin}" href="/admin/logs" class="submenu-item">
+                            <i class="fas fa-clipboard-list"></i>
+                            <span>操作日志</span>
+                        </a>
                     </nav>
                 </aside>
 
@@ -135,5 +139,6 @@
     </div>
 
     <script th:src="@{/js/admin.js}"></script>
+    <script th:src="@{/js/password.js}"></script>
 </body>
 </html>

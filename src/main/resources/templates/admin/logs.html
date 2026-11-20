@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>操作日志 - CodeGuardian AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body>
+<div class="admin-container">
+    <aside class="sidebar">
+        <div class="logo"><i class="fas fa-shield-alt"></i></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard" title="仪表盘"><i class="fas fa-chart-pie"></i></a></li>
+            <li th:if="${canReview or canQuery}"><a href="/review" title="搜索"><i class="fas fa-search"></i></a></li>
+            <li th:if="${canQuery}"><a href="/review/reports" title="任务列表"><i class="fas fa-file-lines"></i></a></li>
+            <li th:if="${canAdmin}"><a href="/admin/users" class="active" title="权限管理"><i class="fas fa-user-shield"></i></a></li>
+            <li th:if="${canAdmin}"><a href="/admin/knowledge" title="知识库管理"><i class="fas fa-book"></i></a></li>
+            <li th:if="${canConfig}"><a href="/admin/settings" title="设置"><i class="fas fa-cog"></i></a></li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="top-header">
+            <h1 class="page-title">操作日志</h1>
+            <div class="user-section">
+                <div class="user-info">
+                    <span class="user-label" th:text="${roleName ?: '系统管理员'}">系统管理员</span>
+                    <span class="username" th:text="${username ?: 'ADMIN'}">ADMIN</span>
+                </div>
+                <div class="user-avatar" th:text="${avatarChar ?: '系'}">系</div>
+                <button class="logout-btn" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i> 登出
+                </button>
+            </div>
+        </header>
+
+        <div class="content-wrapper">
+            <aside class="submenu-panel">
+                <nav class="submenu-nav">
+                    <a th:if="${canAdmin}" href="/admin/users" class="submenu-item">
+                        <i class="fas fa-users"></i>
+                        <span>用户管理</span>
+                    </a>
+                    <a th:if="${canAdmin}" href="/admin/roles" class="submenu-item">
+                        <i class="fas fa-user-tag"></i>
+                        <span>角色管理</span>
+                    </a>
+                    <a th:if="${canConfig}" href="/admin/permissions" class="submenu-item">
+                        <i class="fas fa-key"></i>
+                        <span>权限列表</span>
+                    </a>
+                    <a href="/admin/logs" class="submenu-item active">
+                        <i class="fas fa-clipboard-list"></i>
+                        <span>操作日志</span>
+                    </a>
+                </nav>
+            </aside>
+
+            <div class="content-panel">
+                <div class="content-area">
+                    <div class="content-window">
+                        <div class="page-header">
+                            <h2 class="content-title">操作日志</h2>
+                        </div>
+
+                        <div class="search-section">
+                            <input type="text" id="keyword" class="search-input"
+                                   placeholder="搜索用户名 / 操作 / IP"
+                                   onkeydown="if(event.key==='Enter'){loadLogs()}">
+                            <select id="statusFilter" class="filter-select" onchange="loadLogs()">
+                                <option value="">全部状态</option>
+                                <option value="0">成功</option>
+                                <option value="1">失败</option>
+                            </select>
+                            <button class="query-btn" onclick="loadLogs()">查询</button>
+                            <button class="reset-btn" onclick="resetFilters()">重置</button>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="user-table">
+                                <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>用户</th>
+                                    <th>操作</th>
+                                    <th>方法</th>
+                                    <th>IP</th>
+                                    <th>耗时</th>
+                                    <th>状态</th>
+                                    <th>详情</th>
+                                </tr>
+                                </thead>
+                                <tbody id="logTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="pagination">
+                            <button class="page-btn" id="prevBtn" onclick="changePage(-1)">上一页</button>
+                            <span class="page-info" id="pageInfo">第1/1页 (共0条)</span>
+                            <button class="page-btn" id="nextBtn" onclick="changePage(1)">下一页</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script th:src="@{/js/http.js}"></script>
+<script th:src="@{/js/password.js}"></script>
+<script th:inline="javascript">
+    let currentPage = 0;
+    let totalPages = 1;
+    let pageSize = 20;
+    let logs = [];
+
+    async function loadLogs() {
+        const keyword = document.getElementById('keyword').value.trim();
+        const status = document.getElementById('statusFilter').value;
+        let url = `/admin/logs/api?page=${currentPage}&size=${pageSize}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        if (status !== '') url += `&status=${status}`;
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                alert(error.message || error.error || '加载操作日志失败');
+                return;
+            }
+            const result = await response.json();
+            logs = result.content || [];
+            totalPages = result.totalPages || 1;
+            renderLogs(logs);
+            updatePagination(result.totalElements || 0);
+        } catch (error) {
+            console.error('加载操作日志失败:', error);
+            alert('加载操作日志失败，请稍后重试');
+        }
+    }
+
+    function renderLogs(items) {
+        const tbody = document.getElementById('logTableBody');
+        tbody.innerHTML = '';
+
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#a0a0a0;">暂无数据</td></tr>';
+            return;
+        }
+
+        items.forEach(item => {
+            const tr = document.createElement('tr');
+
+            const timeTd = document.createElement('td');
+            timeTd.textContent = item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN') : '-';
+            tr.appendChild(timeTd);
+
+            const userTd = document.createElement('td');
+            userTd.textContent = item.username || (item.userId ? `#${item.userId}` : '-');
+            tr.appendChild(userTd);
+
+            const operationTd = document.createElement('td');
+            operationTd.textContent = item.operation || '-';
+            tr.appendChild(operationTd);
+
+            const methodTd = document.createElement('td');
+            methodTd.textContent = item.method || '-';
+            methodTd.title = item.method || '';
+            tr.appendChild(methodTd);
+
+            const ipTd = document.createElement('td');
+            ipTd.textContent = item.ip || '-';
+            tr.appendChild(ipTd);
+
+            const timeMillisTd = document.createElement('td');
+            timeMillisTd.textContent = item.timeMillis != null ? `${item.timeMillis} ms` : '-';
+            tr.appendChild(timeMillisTd);
+
+            const statusTd = document.createElement('td');
+            const statusTag = document.createElement('span');
+            if (item.status === 0) {
+                statusTag.className = 'status-tag active';
+                statusTag.textContent = '成功';
+            } else {
+                statusTag.className = 'status-tag locked';
+                statusTag.textContent = '失败';
+            }
+            statusTd.appendChild(statusTag);
+            tr.appendChild(statusTd);
+
+            const detailTd = document.createElement('td');
+            const detailBtn = document.createElement('button');
+            detailBtn.className = 'action-btn edit-btn';
+            detailBtn.textContent = '查看';
+            detailBtn.onclick = () => {
+                const detail = `参数：\n${item.params || '-'}\n\n错误：\n${item.errorMsg || '-'}`;
+                alert(detail);
+            };
+            detailTd.appendChild(detailBtn);
+            tr.appendChild(detailTd);
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    function updatePagination(totalElements) {
+        document.getElementById('pageInfo').textContent =
+            `第${totalPages === 0 ? 0 : currentPage + 1}/${totalPages}页 (共${totalElements}条)`;
+        document.getElementById('prevBtn').disabled = currentPage <= 0;
+        document.getElementById('nextBtn').disabled = currentPage >= totalPages - 1;
+    }
+
+    function changePage(delta) {
+        const target = currentPage + delta;
+        if (target < 0 || target >= totalPages) return;
+        currentPage = target;
+        loadLogs();
+    }
+
+    function resetFilters() {
+        document.getElementById('keyword').value = '';
+        document.getElementById('statusFilter').value = '';
+        currentPage = 0;
+        loadLogs();
+    }
+
+    async function logout() {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } finally {
+            window.location.href = '/login';
+        }
+    }
+
+    loadLogs();
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 package com.codeguardian.controller;
 
+import com.codeguardian.annotation.OperationLogRecord;
 import com.codeguardian.model.dto.SettingsDTO;
 import com.codeguardian.dto.OperationResponseDTO;
 import com.codeguardian.service.SystemConfigService;
@@ -44,6 +45,7 @@ public class SettingsController {
     @PostMapping("/save")
     @ResponseBody
     @SaCheckPermission("CONFIG")
+    @OperationLogRecord(module = "系统设置", action = "保存设置")
     public ResponseEntity<OperationResponseDTO> saveSettings(@RequestBody SettingsDTO settings) {
         try {
             configService.saveSettings(settings);
@@ -75,6 +77,7 @@ public class SettingsController {
     @PostMapping("/import")
     @ResponseBody
     @SaCheckPermission("CONFIG")
+    @OperationLogRecord(module = "系统设置", action = "导入设置")
     public ResponseEntity<OperationResponseDTO> importSettings(@RequestBody SettingsDTO settings) {
         try {
             configService.saveSettings(settings);

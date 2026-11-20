@@ -102,7 +102,7 @@ public class CicdController {
                 .status(com.codeguardian.enums.TaskStatusEnum.fromValue(task.getStatus()).name())
                 .passed(passed)
                 .message(message)
-                .reportUrl("/review/report/" + task.getId()) // 假设的前端报告地址
+                .reportUrl("/report/" + task.getId())
                 .summary(summary)
                 .build());
     }

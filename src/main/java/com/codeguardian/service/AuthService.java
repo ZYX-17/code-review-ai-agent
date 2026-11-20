@@ -96,4 +96,28 @@ public class AuthService {
             .token(token)
             .build();
     }
+
+    /**
+     * 修改当前用户的密码
+     *
+     * @param userId      当前登录用户ID
+     * @param oldPassword 原密码
+     * @param newPassword 新密码
+     */
+    @Transactional
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("用户不存在"));
+
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("原密码不正确");
+        }
+        if (oldPassword.equals(newPassword)) {
+            throw new IllegalArgumentException("新密码不能与原密码相同");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        log.info("用户修改密码成功: {}", user.getUsername());
+    }
 }

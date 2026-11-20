@@ -1,6 +1,8 @@
 package com.codeguardian.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.codeguardian.annotation.OperationLogRecord;
+import com.codeguardian.dto.ChangePasswordDTO;
 import com.codeguardian.dto.LoginRequestDTO;
 import com.codeguardian.dto.LoginResponseDTO;
 import com.codeguardian.dto.UserCreateDTO;
@@ -66,6 +68,7 @@ public class AuthController {
      * @return 登录成功跳转到用户管理页，失败返回登录页
      */
     @PostMapping("/login")
+    @OperationLogRecord(module = "认证", action = "登录")
     public String login(@Valid @ModelAttribute("loginRequest") LoginRequestDTO request,
                        BindingResult bindingResult,
                        Model model,
@@ -116,6 +119,7 @@ public class AuthController {
      */
     @PostMapping("/api/auth/login")
     @ResponseBody
+    @OperationLogRecord(module = "认证", action = "登录")
     public ResponseEntity<LoginResponseDTO> loginApi(@Valid @RequestBody LoginRequestDTO request,
                                                       HttpServletRequest httpRequest) {
         String clientIp = getClientIp(httpRequest);
@@ -139,6 +143,7 @@ public class AuthController {
      */
     @PostMapping("/api/auth/register")
     @ResponseBody
+    @OperationLogRecord(module = "认证", action = "注册")
     public ResponseEntity<LoginResponseDTO> register(@Valid @RequestBody UserCreateDTO createDTO,
                                                      HttpServletRequest httpRequest) {
         if (createDTO.getRoleCodes() == null || createDTO.getRoleCodes().isEmpty()) {
@@ -164,17 +169,41 @@ public class AuthController {
      */
     @PostMapping("/api/auth/logout")
     @ResponseBody
+    @OperationLogRecord(module = "认证", action = "登出")
     public ResponseEntity<Void> logoutApi(HttpServletRequest request, HttpServletResponse response) {
         performLogout(request, response);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/logout")
+    @OperationLogRecord(module = "认证", action = "登出")
     public String logout(HttpServletRequest request, HttpServletResponse response) {
         performLogout(request, response);
         return "redirect:/login";
     }
-    
+
+    /**
+     * 修改当前用户密码（API）
+     *
+     * <p>需要登录；校验原密码后更新为新密码。</p>
+     *
+     * @param changePasswordDTO 原密码与新密码
+     * @return 成功标识与提示信息
+     */
+    @PostMapping("/api/auth/change-password")
+    @ResponseBody
+    @OperationLogRecord(module = "认证", action = "修改密码")
+    public ResponseEntity<java.util.Map<String, Object>> changePassword(
+            @Valid @RequestBody ChangePasswordDTO changePasswordDTO) {
+        // /api/auth/** 在拦截器中放行，这里显式校验登录态
+        StpUtil.checkLogin();
+        Long userId = StpUtil.getLoginIdAsLong();
+        authService.changePassword(userId, changePasswordDTO.getOldPassword(), changePasswordDTO.getNewPassword());
+        return ResponseEntity.ok(java.util.Map.of(
+                "success", true,
+                "message", "密码修改成功"));
+    }
+
     /**
      * 解析客户端IP地址
      *

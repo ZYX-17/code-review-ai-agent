@@ -66,12 +66,12 @@ public class AIModelService {
      */
     public List<Finding> reviewCode(String codeContent, String language, String modelProvider, boolean enableRag, List<Finding> existingFindings) {
         if (Boolean.FALSE.equals(aiConfigProperties.getEnabled())) {
-            log.warn("LLM调用已禁用（ai.enabled=false），跳过大模型审查");
-            return new ArrayList<>();
+            log.warn("LLM调用已禁用（ai.enabled=false），无法执行AI审查");
+            throw new IllegalStateException("AI审查已禁用（ai.enabled=false）");
         }
         if (!chatClientFactory.hasAvailableProviders()) {
-            log.warn("未配置任何可用的大模型，跳过大模型审查");
-            return new ArrayList<>();
+            log.warn("未配置任何可用的大模型，无法执行AI审查");
+            throw new IllegalStateException("未配置可用的大模型，无法执行AI审查");
         }
         String finalProvider = modelProvider != null ? modelProvider : "默认";
         log.info("========== 开始AI代码审查 ==========");
@@ -193,7 +193,8 @@ public class AIModelService {
         } catch (Exception e) {
             log.error("========== AI审查异常 ==========");
             log.error("提供商: {}, 错误信息: {}", finalProvider, e.getMessage(), e);
-            return new ArrayList<>();
+            String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            throw new RuntimeException("AI审查失败: " + reason, e);
         }
     }
     
