@@ -125,6 +125,35 @@ public class SystemConfigService {
         }
     }
 
+    /**
+     * 恢复默认设置
+     */
+    @Transactional
+    public void resetSettings() {
+        SettingsDTO defaults = new SettingsDTO();
+        defaults.setProjectRoot("");
+        defaults.setRuleStandard("alibaba");
+        defaults.setRulePreset("general");
+        defaults.setIncludePaths("src/main/java");
+        defaults.setExcludePaths("target\n.git\ntest");
+        defaults.setChartHeight(300);
+        defaults.setRingThickness(20);
+        defaults.setMaxIssues(100);
+        defaults.setAnimationInterval(600);
+
+        Map<String, Boolean> categories = new HashMap<>();
+        Map<String, Integer> weights = new HashMap<>();
+        for (String cat : CATEGORIES) {
+            categories.put(cat, true);
+            weights.put(cat, 20);
+        }
+        defaults.setRuleCategories(categories);
+        defaults.setRuleWeights(weights);
+
+        saveSettings(defaults);
+        log.info("系统设置已恢复默认值");
+    }
+
     private void validateSettings(SettingsDTO dto) {
         if (dto.getChartHeight() != null && dto.getChartHeight() < 100) {
             throw new IllegalArgumentException("可视化图表高度必须至少为 100px");

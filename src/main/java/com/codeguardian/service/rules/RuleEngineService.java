@@ -86,7 +86,7 @@ public class RuleEngineService {
                             .endLine(line) // 简单起见，暂定单行
                             .description(rule.getDescription())
                             .suggestion(rule.getSuggestion())
-                            .category("CODE_STYLE")
+                            .category(resolveCategory(rule))
                             .diff(null)
                             .build());
                 }
@@ -96,6 +96,38 @@ public class RuleEngineService {
         }
 
         return findings;
+    }
+
+    private String resolveCategory(RuleDefinition rule) {
+        if (rule.getCategory() != null && !rule.getCategory().isBlank()) {
+            return rule.getCategory().trim().toUpperCase();
+        }
+
+        String text = ((rule.getName() != null ? rule.getName() : "") + " "
+                + (rule.getDescription() != null ? rule.getDescription() : "")).toLowerCase();
+
+        if (containsAny(text, "sql注入", "敏感", "密码", "密钥", "token", "xss", "csrf", "越权", "加密", "安全")) {
+            return "SECURITY";
+        }
+        if (containsAny(text, "性能", "循环", "缓存", "索引", "并发", "线程", "内存", "o(n)", "批量")) {
+            return "PERFORMANCE";
+        }
+        if (containsAny(text, "空指针", "npe", "异常", "资源", "关闭", "死锁", "边界", "判空", "类型转换")) {
+            return "BUG";
+        }
+        if (containsAny(text, "命名", "注释", "重复", "复杂度", "可读", "魔法值", "日志", "格式", "风格")) {
+            return "MAINTAINABILITY";
+        }
+        return "CODE_STYLE";
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int computeLineNumber(String text, int offset) {

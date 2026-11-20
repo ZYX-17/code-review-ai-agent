@@ -241,7 +241,15 @@ public class KnowledgeBaseService {
      * 上传并处理文档 (支持多种格式)
      */
     public void uploadDocument(MultipartFile file) throws IOException {
-        log.info("Starting document upload process for file: {}, size: {}", file.getOriginalFilename(), file.getSize());
+        uploadDocument(file, "CODE_STYLE");
+    }
+
+    /**
+     * 上传并处理文档，并指定分类
+     */
+    public void uploadDocument(MultipartFile file, String category) throws IOException {
+        log.info("Starting document upload process for file: {}, category: {}, size: {}",
+                file.getOriginalFilename(), category, file.getSize());
         try {
             // Upload to MinIO
             log.info("Uploading file to MinIO...");
@@ -266,7 +274,7 @@ public class KnowledgeBaseService {
                 .id(id)
                 .title(file.getOriginalFilename())
                 .content(text)
-                .category("CODE_STYLE")
+                .category(resolveCategory(category))
                 .minioBucketName(minioStorageService.getBucketName())
                 .minioObjectName(objectName)
                 .fileSize(file.getSize())
@@ -295,6 +303,13 @@ public class KnowledgeBaseService {
         }
     }
     
+    private String resolveCategory(String category) {
+        if (category == null || category.trim().isEmpty()) {
+            return "CODE_STYLE";
+        }
+        return category.trim().toUpperCase();
+    }
+
     public Page<KnowledgeDocument> getDocuments(int page, int size, String keyword) {
         // 使用 Sort.unsorted()，因为排序已经在 Repository 的 @Query 中指定了
         Pageable pageable = PageRequest.of(page - 1, size, Sort.unsorted());
@@ -328,13 +343,20 @@ public class KnowledgeBaseService {
             }
         }
 
-        // 2. Delete from DB
+        // 2. Delete vectors of this document (chunks carry source_doc_id metadata)
+        try {
+            jdbcTemplate.update("DELETE FROM vector_store WHERE metadata->>'source_doc_id' = ?", id);
+        } catch (Exception e) {
+            log.warn("Failed to delete vectors for document {}: {}", id, e.getMessage());
+        }
+
+        // 3. Delete from DB
         repository.deleteById(id);
 
-        // 3. Update memory cache
+        // 4. Update memory cache
         this.documents.removeIf(d -> d.getId().equals(id));
-        
-        // 4. Rebuild BM25 indices
+
+        // 5. Rebuild BM25 indices
         buildIndices();
     }
 
@@ -344,13 +366,17 @@ public class KnowledgeBaseService {
 
     public Map<String, Object> getStats() {
         long count = repository.count();
-        // Calculate total size if possible, or just return count for now
-        // Assuming we want a simple stats object
+        java.time.LocalDateTime createTime = repository.findAll().stream()
+                .map(KnowledgeDocument::getCreateTime)
+                .filter(java.util.Objects::nonNull)
+                .min(java.time.LocalDateTime::compareTo)
+                .orElse(java.time.LocalDateTime.now());
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("documentCount", count);
         stats.put("name", "默认知识库");
         stats.put("description", "系统默认的向量知识库，存储所有上传的代码规范和技术文档");
-        stats.put("createTime", java.time.LocalDateTime.now()); // Placeholder
+        stats.put("createTime", createTime);
         return stats;
     }
     

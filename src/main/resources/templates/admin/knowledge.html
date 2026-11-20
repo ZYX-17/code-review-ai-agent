@@ -198,6 +198,13 @@
                                 <h3 class="upload-title"><i class="fas fa-file-alt" style="color: #3498db;"></i> 上传文档</h3>
                                 <p class="upload-desc">支持 PDF、Word、Excel、PowerPoint、TXT、Markdown 等格式。上传的代码规范或技术文档将被解析并存入向量知识库，用于辅助代码审查。</p>
                                 <form action="/admin/knowledge/upload" method="post" enctype="multipart/form-data" class="upload-form">
+                                    <select name="category" class="filter-select" style="margin-right: 10px;">
+                                        <option th:each="cat : ${categories}"
+                                                th:value="${cat.code}"
+                                                th:text="${cat.name}"
+                                                th:selected="${cat.code == 'CODE_STYLE'}"></option>
+                                        <option value="CODE_STYLE" th:if="${#lists.isEmpty(categories)}">代码风格</option>
+                                    </select>
                                     <input type="file" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md" class="file-input" required>
                                     <button type="submit" class="upload-btn"><i class="fas fa-cloud-upload-alt"></i> 上传并索引</button>
                                 </form>

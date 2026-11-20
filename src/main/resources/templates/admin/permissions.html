@@ -56,6 +56,10 @@
                             <i class="fas fa-key"></i>
                             <span>权限列表</span>
                         </a>
+                        <a th:if="${canAdmin}" href="/admin/categories" class="submenu-item">
+                            <i class="fas fa-tags"></i>
+                            <span>分类管理</span>
+                        </a>
                         <a th:if="${canAdmin}" href="/admin/logs" class="submenu-item">
                             <i class="fas fa-clipboard-list"></i>
                             <span>操作日志</span>
@@ -67,7 +71,12 @@
                 <div class="content-panel">
                     <div class="content-area">
                         <div class="content-window">
-                            <h2 class="content-title">权限列表</h2>
+                            <div class="page-header">
+                                <h2 class="content-title">权限列表</h2>
+                                <button class="add-user-btn" onclick="showPermissionModal()">
+                                    <span>+</span> 新增权限
+                                </button>
+                            </div>
                             <div id="permissionsContent" class="permissions-grid">
                                 <!-- 动态加载 -->
                             </div>
@@ -77,6 +86,45 @@
             </div>
         </main>
     </div>
+
+    <div id="permissionModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="permissionModalTitle">新增权限</h2>
+                <button class="modal-close" onclick="closePermissionModal()">×</button>
+            </div>
+            <form id="permissionForm" onsubmit="savePermission(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="permissionId">
+                    <div class="form-group">
+                        <label>权限代码</label>
+                        <input type="text" id="permissionCode" required maxlength="32" placeholder="例如 DEPLOY">
+                    </div>
+                    <div class="form-group">
+                        <label>权限名称</label>
+                        <input type="text" id="permissionName" required maxlength="64">
+                    </div>
+                    <div class="form-group">
+                        <label>描述</label>
+                        <input type="text" id="permissionDescription">
+                    </div>
+                    <div class="form-group">
+                        <label>资源编码（1=TASK, 2=REPORT, 3=CONFIG, 99=ALL）</label>
+                        <input type="number" id="permissionResource" value="1" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>操作编码（1=READ, 2=CREATE, 3=UPDATE, 99=ALL）</label>
+                        <input type="number" id="permissionAction" value="1" min="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closePermissionModal()">取消</button>
+                    <button type="submit" class="btn-submit">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script th:src="@{/js/http.js}"></script>
     <script th:src="@{/js/admin.js}"></script>
     <script th:src="@{/js/password.js}"></script>

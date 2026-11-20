@@ -1,5 +1,12 @@
 // 仪表盘图表初始化
 
+function chartAnimationOptions() {
+    const interval = window.dashboardConfig ? window.dashboardConfig.animationInterval : null;
+    return (Number.isFinite(interval) && interval >= 0)
+        ? { animation: { duration: interval } }
+        : {};
+}
+
 // 图表1: 代码健康分（环形图）
 function initHealthScoreChart() {
     const ctx = document.getElementById('healthScoreChart');
@@ -44,6 +51,7 @@ function initHealthScoreChart() {
             }]
         },
         options: {
+            ...chartAnimationOptions(),
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
@@ -126,6 +134,7 @@ function initProblemDistributionChart() {
             }]
         },
         options: {
+            ...chartAnimationOptions(),
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
@@ -217,6 +226,7 @@ function initProjectStatisticsChart() {
             ]
         },
         options: {
+            ...chartAnimationOptions(),
             responsive: true,
             maintainAspectRatio: false,
             plugins: {

@@ -29,36 +29,37 @@ public class DashboardService {
      */
     @Transactional(readOnly = true)
     public DashboardDTO computeDashboardData() {
-        Optional<ReviewTask> latestTaskOpt = reviewTaskRepository.findTopByStatusOrderByCreatedAtDesc(com.codeguardian.enums.TaskStatusEnum.COMPLETED.getValue());
-        
-        int healthScore = 100;
         DashboardDTO.SeverityDistribution distribution = DashboardDTO.SeverityDistribution.builder()
                 .critical(0).high(0).medium(0).low(0)
                 .build();
 
-        if (latestTaskOpt.isPresent()) {
-            ReviewTask latestTask = latestTaskOpt.get();
-            List<Finding> findings = findingRepository.findByTaskId(latestTask.getId());
-            
-            for (Finding f : findings) {
-                Integer severity = f.getSeverity();
-                if (severity == null) continue;
-                if (severity.equals(com.codeguardian.enums.SeverityEnum.CRITICAL.getValue())) distribution.setCritical(distribution.getCritical() + 1);
-                else if (severity.equals(com.codeguardian.enums.SeverityEnum.HIGH.getValue())) distribution.setHigh(distribution.getHigh() + 1);
-                else if (severity.equals(com.codeguardian.enums.SeverityEnum.MEDIUM.getValue())) distribution.setMedium(distribution.getMedium() + 1);
-                else distribution.setLow(distribution.getLow() + 1);
+        // 聚合最近 20 个已完成任务的问题分布，而不是只看最后一个任务
+        List<Object[]> severityCounts = findingRepository.countSeverityForRecentCompletedTasks(
+                com.codeguardian.enums.TaskStatusEnum.COMPLETED.getValue(), 20);
+        for (Object[] row : severityCounts) {
+            if (row == null || row.length < 2 || row[0] == null) continue;
+            int severity = ((Number) row[0]).intValue();
+            int count = ((Number) row[1]).intValue();
+            if (severity == com.codeguardian.enums.SeverityEnum.CRITICAL.getValue()) {
+                distribution.setCritical(distribution.getCritical() + count);
+            } else if (severity == com.codeguardian.enums.SeverityEnum.HIGH.getValue()) {
+                distribution.setHigh(distribution.getHigh() + count);
+            } else if (severity == com.codeguardian.enums.SeverityEnum.MEDIUM.getValue()) {
+                distribution.setMedium(distribution.getMedium() + count);
+            } else {
+                distribution.setLow(distribution.getLow() + count);
             }
-            
-            healthScore = calculateHealthScore(distribution);
         }
 
-        // 获取最近5个完成的项目类型任务用于项目统计（每个项目只取最新的）
-        List<ReviewTask> recentTasks = reviewTaskRepository
-                .findLatestProjectTasks(com.codeguardian.enums.TaskStatusEnum.COMPLETED.getValue(), com.codeguardian.enums.ReviewTypeEnum.PROJECT.getValue(), org.springframework.data.domain.PageRequest.of(0, 5));
+        int healthScore = calculateHealthScore(distribution);
+
+        // 最近 5 个完成的任务（不再只统计 PROJECT 类型）
+        List<ReviewTask> recentTasks = reviewTaskRepository.findTop5ByStatusOrderByCreatedAtDesc(
+                com.codeguardian.enums.TaskStatusEnum.COMPLETED.getValue());
         List<DashboardDTO.ProjectStatDTO> projectStats = recentTasks.stream()
                 .map(this::convertToProjectStat)
                 .collect(Collectors.toList());
-        
+
         // 反转列表，使图表从左到右显示时间顺序（旧 -> 新）
         Collections.reverse(projectStats);
 

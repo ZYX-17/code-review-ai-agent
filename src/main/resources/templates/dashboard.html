@@ -58,9 +58,9 @@
                     </div>
                 </div>
 
-                <!-- 图表3: 项目问题统计 -->
+                <!-- 图表3: 最近任务问题统计 -->
                 <div class="chart-card full-width">
-                    <h2 class="chart-title">项目问题统计</h2>
+                    <h2 class="chart-title">最近任务问题统计</h2>
                     <div class="chart-wrapper">
                         <canvas id="projectStatisticsChart"></canvas>
                     </div>
@@ -72,7 +72,8 @@
     <script th:inline="javascript">
         window.dashboardConfig = {
             chartHeight: /*[[${config.chartHeight}]]*/ 300,
-            ringThickness: /*[[${config.ringThickness}]]*/ 20
+            ringThickness: /*[[${config.ringThickness}]]*/ 20,
+            animationInterval: /*[[${config.animationInterval}]]*/ 600
         };
         window.dashboardData = /*[[${dashboardData}]]*/ {
             healthScore: 100,

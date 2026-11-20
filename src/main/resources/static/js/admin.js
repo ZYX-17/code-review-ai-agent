@@ -643,9 +643,106 @@ function renderPermissionCards(permissions) {
                     <div class="permission-action">操作: ${permission.action}</div>
                 </div>
                 <p class="permission-description">${permission.description || ''}</p>
+                <div class="permission-actions" style="margin-top: 12px; display: flex; gap: 8px;">
+                    <button class="action-btn edit-btn" onclick="editPermission(${permission.id})">编辑</button>
+                    <button class="action-btn delete-btn" onclick="deletePermission(${permission.id}, '${permission.code}')">删除</button>
+                </div>
             </div>
         `;
     }).join('');
+}
+
+// 编辑权限
+async function editPermission(id) {
+    try {
+        const response = await fetch('/admin/permissions/api');
+        if (!response.ok) {
+            if (handleUnauthorized(response)) return;
+            alert('加载权限失败，请稍后重试');
+            return;
+        }
+        const permissions = await response.json();
+        const permission = permissions.find(item => item.id === id);
+        if (permission) {
+            showPermissionModal(permission);
+        }
+    } catch (error) {
+        console.error('加载权限失败:', error);
+        alert('加载权限失败，请稍后重试');
+    }
+}
+
+// 显示权限新增/编辑模态框
+function showPermissionModal(permission) {
+    document.getElementById('permissionModalTitle').textContent = permission ? '编辑权限' : '新增权限';
+    document.getElementById('permissionId').value = permission ? permission.id : '';
+    document.getElementById('permissionCode').value = permission ? permission.code : '';
+    document.getElementById('permissionName').value = permission ? permission.name : '';
+    document.getElementById('permissionDescription').value = permission ? (permission.description || '') : '';
+    document.getElementById('permissionResource').value = permission && permission.resource != null ? permission.resource : 1;
+    document.getElementById('permissionAction').value = permission && permission.action != null ? permission.action : 1;
+    document.getElementById('permissionModal').style.display = 'flex';
+}
+
+function closePermissionModal() {
+    document.getElementById('permissionModal').style.display = 'none';
+}
+
+// 保存权限
+async function savePermission(event) {
+    event.preventDefault();
+
+    const id = document.getElementById('permissionId').value;
+    const payload = {
+        code: document.getElementById('permissionCode').value.trim(),
+        name: document.getElementById('permissionName').value.trim(),
+        description: document.getElementById('permissionDescription').value.trim(),
+        resource: parseInt(document.getElementById('permissionResource').value, 10),
+        action: parseInt(document.getElementById('permissionAction').value, 10)
+    };
+
+    try {
+        const response = await fetch(id ? `/admin/permissions/api/${id}` : '/admin/permissions/api', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            closePermissionModal();
+            loadPermissionsForList();
+            return;
+        }
+
+        if (handleUnauthorized(response)) return;
+        const error = await response.json().catch(() => ({}));
+        alert(error.message || error.error || '保存权限失败');
+    } catch (error) {
+        console.error('保存权限失败:', error);
+        alert('保存权限失败，请稍后重试');
+    }
+}
+
+// 删除权限
+async function deletePermission(id, code) {
+    if (!confirm(`确认删除权限 ${code}？`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/admin/permissions/api/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            loadPermissionsForList();
+            return;
+        }
+
+        if (handleUnauthorized(response)) return;
+        const error = await response.json().catch(() => ({}));
+        alert(error.message || error.error || '删除权限失败');
+    } catch (error) {
+        console.error('删除权限失败:', error);
+        alert('删除权限失败，请稍后重试');
+    }
 }
 
 // 显示添加角色模态框

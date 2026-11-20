@@ -2110,24 +2110,24 @@ async function saveGitConfig() {
         directoryStatus.textContent = '正在下载...';
     }
     
-    // 模拟下载进度（因为Git clone是同步的，我们使用模拟进度）
-    let progress = 0;
+    // Git clone 在服务端是同步操作，无法获得真实百分比；
+    // 这里只展示阶段提示，不伪造进度数字。
+    if (progressFill) {
+        progressFill.style.width = '30%';
+    }
+    let elapsedSeconds = 0;
     const progressInterval = setInterval(() => {
-        progress += Math.random() * 15;
-        if (progress > 90) progress = 90; // 最多到90%，等待实际完成
-        if (progressFill) {
-            progressFill.style.width = progress + '%';
-        }
+        elapsedSeconds += 1;
         if (progressText) {
-            if (progress < 30) {
-                progressText.textContent = '正在连接Git仓库...';
-            } else if (progress < 60) {
-                progressText.textContent = '正在下载代码...';
+            if (elapsedSeconds < 10) {
+                progressText.textContent = '正在连接并克隆仓库...';
+            } else if (elapsedSeconds < 30) {
+                progressText.textContent = '正在下载代码，耗时取决于仓库大小...';
             } else {
-                progressText.textContent = '正在处理文件...';
+                progressText.textContent = '仓库较大，仍在下载中...';
             }
         }
-    }, 200);
+    }, 1000);
     
     try {
         console.log('发起Git clone请求...');

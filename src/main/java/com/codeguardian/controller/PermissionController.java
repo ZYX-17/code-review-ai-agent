@@ -1,8 +1,11 @@
 package com.codeguardian.controller;
 
+import com.codeguardian.annotation.OperationLogRecord;
 import com.codeguardian.dto.PermissionDTO;
+import com.codeguardian.dto.PermissionRequestDTO;
 import com.codeguardian.entity.Permission;
 import com.codeguardian.service.PermissionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -61,5 +64,40 @@ public class PermissionController {
     public ResponseEntity<List<PermissionDTO>> getAllPermissionDTOs() {
         List<PermissionDTO> permissions = permissionService.getAllPermissionDTOs();
         return ResponseEntity.ok(permissions);
+    }
+
+    /**
+     * 创建权限（API）
+     */
+    @PostMapping("/api")
+    @ResponseBody
+    @SaCheckPermission("CONFIG")
+    @OperationLogRecord(module = "权限管理", action = "创建权限")
+    public ResponseEntity<Permission> create(@Valid @RequestBody PermissionRequestDTO request) {
+        return ResponseEntity.ok(permissionService.create(request));
+    }
+
+    /**
+     * 更新权限（API）
+     */
+    @PutMapping("/api/{id}")
+    @ResponseBody
+    @SaCheckPermission("CONFIG")
+    @OperationLogRecord(module = "权限管理", action = "更新权限")
+    public ResponseEntity<Permission> update(@PathVariable("id") Long id,
+                                             @Valid @RequestBody PermissionRequestDTO request) {
+        return ResponseEntity.ok(permissionService.update(id, request));
+    }
+
+    /**
+     * 删除权限（API）
+     */
+    @DeleteMapping("/api/{id}")
+    @ResponseBody
+    @SaCheckPermission("CONFIG")
+    @OperationLogRecord(module = "权限管理", action = "删除权限")
+    public ResponseEntity<Void> delete(@PathVariable("id") Long id) {
+        permissionService.delete(id);
+        return ResponseEntity.ok().build();
     }
 }

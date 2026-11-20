@@ -48,7 +48,7 @@
                             <option value="git">Git项目</option>
                         </select>
                         <div class="rules-only-wrapper" style="display: flex; align-items: center; margin-left: 10px;">
-                            <input type="checkbox" id="rulesOnlyCheckbox" style="margin-right: 5px;" checked>
+                            <input type="checkbox" id="rulesOnlyCheckbox" style="margin-right: 5px;">
                             <label for="rulesOnlyCheckbox" style="font-size: 14px; color: var(--text-color); cursor: pointer;">仅规则审查</label>
                         </div>
                         <select class="model-select" id="modelSelect" title="选择AI模型" style="display: none;" th:if="${hasAvailableModelProviders}">
@@ -69,9 +69,12 @@
                             <input type="checkbox" id="ragEnhancementCheckbox" style="margin-right: 5px;" checked>
                             <label for="ragEnhancementCheckbox" style="font-size: 14px; color: var(--text-color); cursor: pointer;">RAG增强</label>
                         </div>
-                        <button class="start-review-btn" id="startReviewBtn" onclick="startReview()">
+                        <button class="start-review-btn" id="startReviewBtn" onclick="startReview()" th:if="${canReview}">
                             <i class="fas fa-play"></i> 开始审查
                         </button>
+                        <span th:unless="${canReview}" style="margin-left: 10px; color: var(--text-secondary-color); font-size: 13px;">
+                            当前账号没有审查权限
+                        </span>
                         <button class="configure-git-btn" id="configureGitBtn" onclick="showGitConfigModal()" style="display: none;">
                             <i class="fas fa-cog"></i> 配置Git项目
                         </button>

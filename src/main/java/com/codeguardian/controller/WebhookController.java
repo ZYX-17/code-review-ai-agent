@@ -5,6 +5,7 @@ import com.codeguardian.dto.ReviewResponseDTO;
 import com.codeguardian.dto.webhook.GitHubWebhookPayload;
 import com.codeguardian.service.ReviewService;
 import com.codeguardian.service.integration.GitFeedbackService;
+import com.codeguardian.service.integration.QualityGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ public class WebhookController {
 
     private final ReviewService reviewService;
     private final GitFeedbackService gitFeedbackService;
+    private final QualityGateService qualityGateService;
 
     /**
      * 处理 GitCode (GitLab compatible) Webhook
@@ -92,13 +94,77 @@ public class WebhookController {
             ReviewResponseDTO response = reviewService.createReviewTask(request);
 
             // 3. 发送初始评论
-            gitFeedbackService.postComment(gitUrl, String.valueOf(mrIid), 
+            gitFeedbackService.postComment(gitUrl, String.valueOf(mrIid),
                     "🤖 **CodeGuardian AI** 已开始审查此 MR。\n\n" +
                     "任务 ID: `" + response.getTaskId() + "`\n" +
                     "请等待后续审查报告。");
 
+            // 4. 等待审查完成并回写最终结果
+            awaitAndReportResult(gitUrl, commitSha, mrIid, response.getTaskId());
+
         } catch (Exception e) {
             log.error("处理 GitCode Webhook 失败", e);
         }
+    }
+
+    /**
+     * 轮询任务状态，完成后回写评论与提交状态
+     */
+    private void awaitAndReportResult(String gitUrl, String commitSha, Integer mrIid, Long taskId) {
+        ReviewResponseDTO finalTask = null;
+
+        try {
+            // 最多等待 10 分钟（120 * 5s）
+            for (int i = 0; i < 120; i++) {
+                finalTask = reviewService.getReviewTask(taskId);
+                String status = finalTask.getStatus();
+                if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
+                    break;
+                }
+                Thread.sleep(5000);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("等待审查任务 {} 被中断", taskId);
+            return;
+        } catch (Exception e) {
+            log.error("轮询审查任务 {} 失败", taskId, e);
+            return;
+        }
+
+        if (finalTask == null) {
+            return;
+        }
+
+        if ("FAILED".equals(finalTask.getStatus())) {
+            String reason = finalTask.getErrorMessage() != null
+                    ? finalTask.getErrorMessage() : "未知错误";
+            if (commitSha != null) {
+                gitFeedbackService.updateStatus(gitUrl, commitSha, "failed", "CodeGuardian AI 审查失败: " + reason);
+            }
+            gitFeedbackService.postComment(gitUrl, String.valueOf(mrIid),
+                    "❌ **CodeGuardian AI** 审查失败。\n\n" +
+                    "任务 ID: `" + taskId + "`\n" +
+                    "原因: " + reason);
+            return;
+        }
+
+        boolean passed = qualityGateService.checkQualityGate(taskId, "CRITICAL");
+        String summary = String.format("严重 %d / 高危 %d / 中危 %d / 低危 %d",
+                finalTask.getCriticalCount(), finalTask.getHighCount(),
+                finalTask.getMediumCount(), finalTask.getLowCount());
+
+        if (commitSha != null) {
+            gitFeedbackService.updateStatus(gitUrl, commitSha,
+                    passed ? "success" : "failed",
+                    "CodeGuardian AI 审查完成，问题：" + summary);
+        }
+
+        gitFeedbackService.postComment(gitUrl, String.valueOf(mrIid),
+                "🤖 **CodeGuardian AI** 审查完成。\n\n" +
+                "- 任务 ID: `" + taskId + "`\n" +
+                "- 问题统计: " + summary + "\n" +
+                "- 门禁（CRITICAL）: " + (passed ? "通过" : "未通过") + "\n" +
+                "- 报告: `/report/" + taskId + "`");
     }
 }

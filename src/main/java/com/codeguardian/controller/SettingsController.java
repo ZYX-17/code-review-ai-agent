@@ -57,6 +57,23 @@ public class SettingsController {
     }
 
     /**
+     * 恢复默认设置
+     */
+    @PostMapping("/reset")
+    @ResponseBody
+    @SaCheckPermission("CONFIG")
+    @OperationLogRecord(module = "系统设置", action = "恢复默认")
+    public ResponseEntity<OperationResponseDTO> resetSettings() {
+        try {
+            configService.resetSettings();
+            return ResponseEntity.ok(OperationResponseDTO.success("已恢复默认设置"));
+        } catch (Exception e) {
+            log.error("Failed to reset settings", e);
+            return ResponseEntity.badRequest().body(OperationResponseDTO.error(e.getMessage()));
+        }
+    }
+
+    /**
      * 导出设置
      */
     @GetMapping("/export")

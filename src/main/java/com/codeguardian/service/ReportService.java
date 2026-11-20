@@ -264,13 +264,31 @@ public class ReportService {
     }
 
     private String buildConfigPanel() {
+        com.codeguardian.model.dto.SettingsDTO settings = systemConfigService.getSettings();
+
+        String standard = settings.getRuleStandard() != null ? settings.getRuleStandard() : "-";
+        String preset = settings.getRulePreset() != null ? settings.getRulePreset() : "-";
+        String categories = settings.getRuleCategories() == null ? "" :
+                settings.getRuleCategories().entrySet().stream()
+                        .filter(entry -> Boolean.TRUE.equals(entry.getValue()))
+                        .map(Map.Entry::getKey)
+                        .collect(java.util.stream.Collectors.joining(", "));
+        if (categories.isEmpty()) {
+            categories = "无";
+        }
+        String excludePaths = settings.getExcludePaths() == null ? "" :
+                settings.getExcludePaths().replaceAll("\\r?\\n", ", ");
+        if (excludePaths.isBlank()) {
+            excludePaths = "无";
+        }
+
         StringBuilder html = new StringBuilder();
         html.append("  <div class=\"panel config-panel\">\n");
         html.append("    <div class=\"panel-hd\">配置与范围</div>\n");
         html.append("    <div class=\"panel-bd\">\n");
-        html.append("      <div class=\"muted\">开启规则：无</div>\n");
-        html.append("      <div class=\"muted\">合集标签：无</div>\n");
-        html.append("      <div class=\"muted\">忽略路径：无</div>\n");
+        html.append("      <div class=\"muted\">开启规则：").append(escapeHtml(standard + " / " + preset)).append("</div>\n");
+        html.append("      <div class=\"muted\">开启分类：").append(escapeHtml(categories)).append("</div>\n");
+        html.append("      <div class=\"muted\">忽略路径：").append(escapeHtml(excludePaths)).append("</div>\n");
         html.append("    </div>\n");
         html.append("  </div>\n");
         return html.toString();

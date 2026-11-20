@@ -1,6 +1,7 @@
 package com.codeguardian.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.codeguardian.service.CategoryService;
 import com.codeguardian.service.rag.KnowledgeBaseService;
 import com.codeguardian.service.rag.KnowledgeDocument;
 import com.codeguardian.util.ViewModelUtils;
@@ -29,6 +30,7 @@ import java.util.Map;
 public class KnowledgeBaseController {
 
     private final KnowledgeBaseService knowledgeBaseService;
+    private final CategoryService categoryService;
 
     @GetMapping
     @SaCheckPermission("ADMIN")
@@ -40,6 +42,7 @@ public class KnowledgeBaseController {
         Page<KnowledgeDocument> docPage = knowledgeBaseService.getDocuments(page, size, keyword);
         model.addAttribute("page", docPage);
         model.addAttribute("keyword", keyword);
+        model.addAttribute("categories", categoryService.listAll());
         model.addAttribute("activeTab", "documents");
         return "admin/knowledge";
     }
@@ -101,15 +104,17 @@ public class KnowledgeBaseController {
 
     @PostMapping("/upload")
     @SaCheckPermission("ADMIN")
-    public String upload(@RequestParam("file") MultipartFile file, RedirectAttributes redirectAttributes) {
+    public String upload(@RequestParam("file") MultipartFile file,
+                         @RequestParam(value = "category", required = false) String category,
+                         RedirectAttributes redirectAttributes) {
         if (file.isEmpty()) {
             redirectAttributes.addFlashAttribute("error", "请选择文件");
             return "redirect:/admin/knowledge";
         }
-        
+
         try {
             // Support generic document upload (Tika handles formats)
-            knowledgeBaseService.uploadDocument(file);
+            knowledgeBaseService.uploadDocument(file, category);
             redirectAttributes.addFlashAttribute("success", "文档上传成功并已处理");
         } catch (Exception e) {
             log.error("Upload failed", e);

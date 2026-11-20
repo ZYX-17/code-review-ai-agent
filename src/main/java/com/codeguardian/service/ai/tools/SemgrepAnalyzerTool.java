@@ -39,26 +39,120 @@ public class SemgrepAnalyzerTool implements Function<SemgrepAnalyzerTool.Request
 
     private final ObjectMapper objectMapper;
 
+    /**
+     * 内置回退规则
+     */
+    private record FallbackRule(String title, String description, String regex,
+                                String severity, String category, String suggestion) {
+    }
+
+    private static final List<FallbackRule> FALLBACK_RULES = List.of(
+            new FallbackRule("可能的SQL注入", "检测到SQL语句与字符串拼接，可能存在注入风险",
+                    "(?i)\"(SELECT|INSERT|UPDATE|DELETE)[^\"]*\"\\s*\\+", "CRITICAL", "SECURITY",
+                    "使用PreparedStatement或参数化查询"),
+            new FallbackRule("敏感信息硬编码", "疑似密码/密钥/Token硬编码在代码中",
+                    "(?i)(password|pwd|secret|token|accesskey|secretkey)\\s*=\\s*\"[^\"]+\"", "CRITICAL", "SECURITY",
+                    "将敏感信息移到配置中心或环境变量"),
+            new FallbackRule("命令执行风险", "检测到Runtime.exec或ProcessBuilder，需确认参数不可控",
+                    "(?i)(Runtime\\.getRuntime\\(\\)\\.exec|new\\s+ProcessBuilder\\s*\\()", "HIGH", "SECURITY",
+                    "避免拼接用户输入执行系统命令"),
+            new FallbackRule("空catch块", "捕获异常后未做任何处理，可能掩盖错误",
+                    "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}", "MEDIUM", "BUG",
+                    "至少记录日志或重新抛出异常"),
+            new FallbackRule("printStackTrace", "直接打印堆栈，生产环境应使用日志框架",
+                    "\\.printStackTrace\\s*\\(", "LOW", "MAINTAINABILITY",
+                    "使用SLF4J记录异常"),
+            new FallbackRule("System.out/err", "生产代码不应直接使用System.out/err",
+                    "System\\.(out|err)\\.print(ln)?\\s*\\(", "LOW", "CODE_STYLE",
+                    "使用日志框架")
+    );
+
     @Override
     public Response apply(Request request) {
         log.info("[Function Calling] AI 模型请求执行 Semgrep 分析工具...");
         long startTime = System.currentTimeMillis();
-        
+
         try {
             Response response = runSemgrepAnalysis(request);
-            
+
             // 将发现的问题添加到上下文，确保即使AI忽略了这些问题，也能被后续流程捕获
             if (response.findings != null && !response.findings.isEmpty()) {
                 log.info("将 Semgrep 发现的 {} 个问题添加到 ReviewContextHolder", response.findings.size());
                 ReviewContextHolder.addFindings(response.findings);
             }
-            
+
             log.info("Semgrep分析完成，耗时: {} ms，发现 {} 个问题", System.currentTimeMillis() - startTime, response.vulnerabilities != null ? response.vulnerabilities.size() : 0);
             return response;
         } catch (Exception e) {
-            log.error("Semgrep运行失败 (耗时: {} ms): {}", System.currentTimeMillis() - startTime, e.getMessage());
-            return new Response(false, List.of("Semgrep分析失败: " + e.getMessage()), "分析过程中发生错误，请检查环境配置。");
+            log.warn("Semgrep运行失败，使用内置回退规则 (耗时: {} ms): {}", System.currentTimeMillis() - startTime, e.getMessage());
+            Response fallback = runFallbackAnalysis(request.code);
+            if (fallback.findings != null && !fallback.findings.isEmpty()) {
+                ReviewContextHolder.addFindings(fallback.findings);
+            }
+            return fallback;
         }
+    }
+
+    /**
+     * Semgrep 不可用时的内置正则回退分析
+     */
+    protected Response runFallbackAnalysis(String code) {
+        List<Finding> findings = new ArrayList<>();
+
+        if (code != null && !code.isEmpty()) {
+            for (FallbackRule rule : FALLBACK_RULES) {
+                try {
+                    Matcher matcher = Pattern.compile(rule.regex(), Pattern.MULTILINE).matcher(code);
+                    int matched = 0;
+                    while (matcher.find() && matched < 20) {
+                        int line = computeLineNumber(code, matcher.start());
+                        boolean duplicate = findings.stream().anyMatch(f ->
+                                rule.title().equals(f.getTitle())
+                                        && f.getStartLine() != null
+                                        && f.getStartLine() == line);
+                        if (duplicate) {
+                            continue;
+                        }
+
+                        findings.add(Finding.builder()
+                                .title(rule.title())
+                                .description(rule.description())
+                                .suggestion(rule.suggestion())
+                                .startLine(line)
+                                .endLine(line)
+                                .location("Code Snippet")
+                                .severity(com.codeguardian.enums.SeverityEnum.fromName(rule.severity()).getValue())
+                                .category(rule.category())
+                                .source("FallbackRules")
+                                .build());
+                        matched++;
+                    }
+                } catch (Exception e) {
+                    log.warn("回退规则执行失败: {}", rule.title(), e);
+                }
+            }
+        }
+
+        List<String> vulnerabilities = findings.stream()
+                .map(f -> String.format("[%s] Line %d: %s", f.getTitle(), f.getStartLine(), f.getDescription()))
+                .collect(Collectors.toList());
+
+        String message = findings.isEmpty()
+                ? "Semgrep 不可用，内置回退规则未发现问题。"
+                : "Semgrep 不可用，已使用内置回退规则完成分析，发现 " + findings.size() + " 个问题。";
+
+        log.info("回退分析完成，发现 {} 个问题", findings.size());
+        return new Response(true, vulnerabilities, findings, message);
+    }
+
+    private int computeLineNumber(String text, int offset) {
+        int line = 1;
+        for (int i = 0; i < offset && i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
     }
 
     public Response runSemgrepAnalysis(Request request) throws Exception {
@@ -239,10 +333,6 @@ public class SemgrepAnalyzerTool implements Function<SemgrepAnalyzerTool.Request
         
         return null;
     }
-
-    // 移除 runFallbackAnalysis 方法和 checkPattern 方法，不再支持回退
-    // private Response runFallbackAnalysis(String code) { ... }
-    // private void checkPattern(...) { ... }
 
     @Data
     @JsonClassDescription("安全分析请求")

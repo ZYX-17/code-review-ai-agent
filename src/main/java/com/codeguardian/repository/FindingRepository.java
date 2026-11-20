@@ -42,6 +42,15 @@ public interface FindingRepository extends JpaRepository<Finding, Long> {
     Long countByTaskIdAndSeverity(@Param("taskId") Long taskId, @Param("severity") Integer severity);
 
     /**
+     * 统计最近 N 个已完成任务的问题严重程度分布
+     */
+    @Query(value = "SELECT f.severity, COUNT(*) FROM findings f " +
+            "JOIN (SELECT id FROM review_tasks WHERE status = :status ORDER BY created_at DESC LIMIT :limit) t " +
+            "ON f.task_id = t.id GROUP BY f.severity", nativeQuery = true)
+    List<Object[]> countSeverityForRecentCompletedTasks(@Param("status") Integer status,
+                                                        @Param("limit") Integer limit);
+
+    /**
      * 根据任务ID删除所有发现
      */
     void deleteByTaskId(Long taskId);

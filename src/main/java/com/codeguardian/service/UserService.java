@@ -3,8 +3,7 @@ package com.codeguardian.service;
 import com.codeguardian.dto.*;
 import com.codeguardian.entity.Role;
 import com.codeguardian.entity.User;
-import com.codeguardian.entity.UserRole;
-import com.codeguardian.repository.RoleRepository;
+import com.codeguardian.entity.UserRole;import com.codeguardian.repository.RoleRepository;
 import com.codeguardian.repository.UserRepository;
 import com.codeguardian.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Subquery;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,7 +59,22 @@ public class UserService {
             if (queryDTO.getStatus() != null) {
                 predicates.add(cb.equal(root.get("status"), queryDTO.getStatus()));
             }
-            
+
+            // 角色筛选：在数据库层过滤，保证分页总数准确
+            if (StringUtils.hasText(queryDTO.getRoleCode())) {
+                String roleCode = queryDTO.getRoleCode().trim().toUpperCase();
+                Subquery<Long> roleSubquery = query.subquery(Long.class);
+                jakarta.persistence.criteria.Root<UserRole> userRoleRoot = roleSubquery.from(UserRole.class);
+                jakarta.persistence.criteria.Root<Role> roleRoot = roleSubquery.from(Role.class);
+                roleSubquery.select(userRoleRoot.get("userId"))
+                        .where(
+                                cb.equal(userRoleRoot.get("userId"), root.get("id")),
+                                cb.equal(userRoleRoot.get("roleId"), roleRoot.get("id")),
+                                cb.equal(roleRoot.get("code"), roleCode)
+                        );
+                predicates.add(cb.exists(roleSubquery));
+            }
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
         
@@ -71,18 +86,10 @@ public class UserService {
         );
         
         Page<User> userPage = userRepository.findAll(spec, pageable);
-        
-        // 如果有角色筛选，需要进一步过滤
+
         List<UserDTO> userDTOs = userPage.getContent().stream()
             .map(this::convertToDTO)
             .collect(Collectors.toList());
-        
-        // 角色筛选
-        if (StringUtils.hasText(queryDTO.getRoleCode())) {
-            userDTOs = userDTOs.stream()
-                .filter(user -> user.getRoles().contains(queryDTO.getRoleCode()))
-                .collect(Collectors.toList());
-        }
         
         // 构建分页结果
         return PageResult.<UserDTO>builder()

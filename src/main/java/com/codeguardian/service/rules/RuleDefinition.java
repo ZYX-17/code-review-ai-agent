@@ -33,4 +33,7 @@ public class RuleDefinition {
     
     /** 修复建议 */
     private String suggestion;
+
+    /** 问题分类: SECURITY / PERFORMANCE / BUG / CODE_STYLE / MAINTAINABILITY */
+    private String category;
 }

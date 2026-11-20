@@ -17,8 +17,8 @@ public class ReviewRequestDTO {
     
     /**
      * 审查类型：PROJECT, DIRECTORY, FILE, SNIPPET, GIT
+     * 由各 Controller 端点自动设置，客户端无需传
      */
-    @NotBlank(message = "审查类型不能为空")
     private String reviewType;
     
     /**

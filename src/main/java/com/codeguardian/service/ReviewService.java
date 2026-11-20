@@ -371,19 +371,53 @@ public class ReviewService {
                     });
         }
         
-        // 根据系统配置过滤问题
+        // 根据系统配置过滤、排序与截断问题
         try {
-            Map<String, Boolean> categories = configService.getSettings().getRuleCategories();
+            com.codeguardian.model.dto.SettingsDTO settings = configService.getSettings();
+            findings = new ArrayList<>(findings);
+
+            Map<String, Boolean> categories = settings.getRuleCategories();
             if (categories != null && !categories.isEmpty()) {
                 findings = findings.stream()
                         .filter(f -> isCategoryEnabled(f.getCategory(), categories))
                         .collect(Collectors.toList());
             }
+
+            // 通用标准不展示低危问题；专业安全保留全部
+            if ("general".equalsIgnoreCase(settings.getRulePreset())) {
+                findings = findings.stream()
+                        .filter(f -> !SeverityEnum.LOW.getValue().equals(f.getSeverity()))
+                        .collect(Collectors.toList());
+            }
+
+            // 严重级别优先，其次按分类权重从高到低
+            Map<String, Integer> weights = settings.getRuleWeights();
+            findings.sort(java.util.Comparator
+                    .comparingInt((Finding f) -> f.getSeverity() != null
+                            ? f.getSeverity() : SeverityEnum.MEDIUM.getValue())
+                    .thenComparingInt(f -> -categoryWeight(weights, f.getCategory())));
+
+            int maxIssues = settings.getMaxIssues() != null ? settings.getMaxIssues() : 100;
+            if (findings.size() > maxIssues) {
+                findings = new ArrayList<>(findings.subList(0, maxIssues));
+            }
         } catch (Exception e) {
-            log.warn("过滤审查结果失败，返回原始结果", e);
+            log.warn("应用系统设置过滤审查结果失败，返回原始结果", e);
         }
-        
+
         return findings;
+    }
+
+    private int categoryWeight(Map<String, Integer> weights, String categoryCode) {
+        if (weights == null) return 20;
+
+        String key = "style";
+        if ("SECURITY".equals(categoryCode)) key = "security";
+        else if ("PERFORMANCE".equals(categoryCode)) key = "performance";
+        else if ("BUG".equals(categoryCode)) key = "logic_error";
+        else if ("MAINTAINABILITY".equals(categoryCode)) key = "maintainability";
+
+        return weights.getOrDefault(key, 20);
     }
 
     private boolean isDuplicate(Finding newFinding, List<Finding> existingFindings) {

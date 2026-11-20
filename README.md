@@ -170,26 +170,27 @@ GET /api/report/{taskId}/markdown
 
 ## 项目文档
 
-- [系统设计文档](docs/系统设计文档.md) - 详细的系统设计说明，包括架构、数据库、API等
-- [架构设计图](docs/架构设计图.md) - 系统架构图和流程图
-- [数据库设计文档](docs/数据库设计文档.md) - PostgreSQL数据库详细设计文档
+设计文档（系统设计、架构图、数据库设计）保存在本地 `docs/` 目录，未随仓库发布。
 
 ## 数据库初始化
 
-数据库脚本位于 `database/` 目录：
+当前版本使用 `database/20260529/` 下的脚本：
 
 ```bash
 # 1. 创建数据库
-createdb -U postgres codeguardian
+createdb -U postgres code_guardian
 
 # 2. 执行建表脚本
-psql -U postgres -d codeguardian -f database/schema.sql
+psql -U postgres -d code_guardian -f database/20260529/schema_20260529.sql
 
-# 3. （可选）插入示例数据
-psql -U postgres -d codeguardian -f database/init_data.sql
+# 3. 初始化权限与管理员
+psql -U postgres -d code_guardian -f database/20260529/init_permissions_20260529.sql
+
+# 4. （可选）插入示例数据
+psql -U postgres -d code_guardian -f database/20260529/init_data_20260529.sql
 ```
 
-详细说明请参考 [database/README.md](database/README.md)
+也可以直接用仓库根目录的 `docker-compose.yml` 启动 PostgreSQL、Redis 和 MinIO。
 
 ## 项目结构
 
@@ -214,9 +215,8 @@ code-review-ai-agent/
 │   └── test/                                      # 测试代码
 ├── config/                                        # 本地配置（真实值不提交）
 │   └── application-local.yml.example              # 本地配置模板
-├── docs/                                          # 项目文档
-│   ├── 系统设计文档.md                              # 系统设计文档
-│   └── 架构设计图.md                                # 架构设计图
+├── deploy/                                        # 部署编排与说明
+├── docker-compose.yml                             # 本地中间件（PostgreSQL/Redis/MinIO）
 ├── pom.xml                                        # Maven配置
 └── README.md                                      # 项目说明
 ```

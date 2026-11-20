@@ -88,7 +88,7 @@
                             
                             <div style="display: flex; gap: 10px; margin-top: 20px;">
                                 <button type="button" class="btn btn-primary" onclick="saveSettings()">保存设置</button>
-                                <button type="button" class="btn" onclick="location.reload()">恢复默认</button>
+                                <button type="button" class="btn" onclick="resetSettings()">恢复默认</button>
                             </div>
                         </div>
 
@@ -363,6 +363,28 @@
                 console.error('Error:', error);
                 alert('保存出错，请查看控制台');
             });
+        }
+
+        // Reset Settings
+        function resetSettings() {
+            if (!confirm('确认恢复默认设置？当前配置会被覆盖。')) {
+                return;
+            }
+
+            fetch('/admin/settings/reset', { method: 'POST' })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        alert('已恢复默认设置');
+                        location.reload();
+                    } else {
+                        alert('恢复失败: ' + result.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('恢复默认设置出错，请查看控制台');
+                });
         }
 
         // Export Settings

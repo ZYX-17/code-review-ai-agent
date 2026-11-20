@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分类管理 - CodeGuardian AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body>
+<div class="admin-container">
+    <aside class="sidebar">
+        <div class="logo"><i class="fas fa-shield-alt"></i></div>
+        <ul class="sidebar-menu">
+            <li><a href="/dashboard" title="仪表盘"><i class="fas fa-chart-pie"></i></a></li>
+            <li th:if="${canReview or canQuery}"><a href="/review" title="搜索"><i class="fas fa-search"></i></a></li>
+            <li th:if="${canQuery}"><a href="/review/reports" title="任务列表"><i class="fas fa-file-lines"></i></a></li>
+            <li th:if="${canAdmin}"><a href="/admin/users" class="active" title="权限管理"><i class="fas fa-user-shield"></i></a></li>
+            <li th:if="${canAdmin}"><a href="/admin/knowledge" title="知识库管理"><i class="fas fa-book"></i></a></li>
+            <li th:if="${canConfig}"><a href="/admin/settings" title="设置"><i class="fas fa-cog"></i></a></li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="top-header">
+            <h1 class="page-title">分类管理</h1>
+            <div class="user-section">
+                <div class="user-info">
+                    <span class="user-label" th:text="${roleName ?: '系统管理员'}">系统管理员</span>
+                    <span class="username" th:text="${username ?: 'ADMIN'}">ADMIN</span>
+                </div>
+                <div class="user-avatar" th:text="${avatarChar ?: '系'}">系</div>
+                <button class="logout-btn" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i> 登出
+                </button>
+            </div>
+        </header>
+
+        <div class="content-wrapper">
+            <aside class="submenu-panel">
+                <nav class="submenu-nav">
+                    <a th:if="${canAdmin}" href="/admin/users" class="submenu-item">
+                        <i class="fas fa-users"></i>
+                        <span>用户管理</span>
+                    </a>
+                    <a th:if="${canAdmin}" href="/admin/roles" class="submenu-item">
+                        <i class="fas fa-user-tag"></i>
+                        <span>角色管理</span>
+                    </a>
+                    <a th:if="${canConfig}" href="/admin/permissions" class="submenu-item">
+                        <i class="fas fa-key"></i>
+                        <span>权限列表</span>
+                    </a>
+                    <a th:if="${canAdmin}" href="/admin/categories" class="submenu-item active">
+                        <i class="fas fa-tags"></i>
+                        <span>分类管理</span>
+                    </a>
+                    <a th:if="${canAdmin}" href="/admin/logs" class="submenu-item">
+                        <i class="fas fa-clipboard-list"></i>
+                        <span>操作日志</span>
+                    </a>
+                </nav>
+            </aside>
+
+            <div class="content-panel">
+                <div class="content-area">
+                    <div class="content-window">
+                        <div class="page-header">
+                            <h2 class="content-title">分类管理</h2>
+                            <button class="add-user-btn" onclick="showCategoryModal()">
+                                <span>+</span> 新增分类
+                            </button>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="user-table">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>分类代码</th>
+                                    <th>名称</th>
+                                    <th>描述</th>
+                                    <th>操作</th>
+                                </tr>
+                                </thead>
+                                <tbody id="categoryTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div id="categoryModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="categoryModalTitle">新增分类</h2>
+            <button class="modal-close" onclick="closeCategoryModal()">×</button>
+        </div>
+        <form id="categoryForm" onsubmit="saveCategory(event)">
+            <div class="modal-body">
+                <input type="hidden" id="categoryId">
+                <div class="form-group">
+                    <label>分类代码（大写字母、数字、下划线）</label>
+                    <input type="text" id="categoryCode" required maxlength="32" placeholder="例如 SECURITY">
+                </div>
+                <div class="form-group">
+                    <label>分类名称</label>
+                    <input type="text" id="categoryName" required maxlength="64" placeholder="例如 安全">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <input type="text" id="categoryDescription" maxlength="500">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" onclick="closeCategoryModal()">取消</button>
+                <button type="submit" class="btn-submit">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script th:src="@{/js/http.js}"></script>
+<script th:src="@{/js/password.js}"></script>
+<script>
+    let categories = [];
+
+    async function loadCategories() {
+        try {
+            const response = await fetch('/admin/categories/api');
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                alert(error.message || error.error || '加载分类失败');
+                return;
+            }
+            categories = await response.json();
+            renderCategories();
+        } catch (error) {
+            console.error('加载分类失败:', error);
+            alert('加载分类失败，请稍后重试');
+        }
+    }
+
+    function renderCategories() {
+        const tbody = document.getElementById('categoryTableBody');
+        tbody.innerHTML = '';
+
+        if (!categories.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a0a0a0;">暂无分类</td></tr>';
+            return;
+        }
+
+        categories.forEach(category => {
+            const tr = document.createElement('tr');
+
+            const idTd = document.createElement('td');
+            idTd.textContent = category.id;
+            tr.appendChild(idTd);
+
+            const codeTd = document.createElement('td');
+            codeTd.textContent = category.code;
+            tr.appendChild(codeTd);
+
+            const nameTd = document.createElement('td');
+            nameTd.textContent = category.name;
+            tr.appendChild(nameTd);
+
+            const descTd = document.createElement('td');
+            descTd.textContent = category.description || '-';
+            tr.appendChild(descTd);
+
+            const actionTd = document.createElement('td');
+            const actionDiv = document.createElement('div');
+            actionDiv.className = 'action-buttons';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'action-btn edit-btn';
+            editBtn.textContent = '编辑';
+            editBtn.onclick = () => showCategoryModal(category);
+            actionDiv.appendChild(editBtn);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'action-btn delete-btn';
+            deleteBtn.textContent = '删除';
+            deleteBtn.onclick = () => deleteCategory(category);
+            actionDiv.appendChild(deleteBtn);
+
+            actionTd.appendChild(actionDiv);
+            tr.appendChild(actionTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    function showCategoryModal(category) {
+        document.getElementById('categoryModalTitle').textContent = category ? '编辑分类' : '新增分类';
+        document.getElementById('categoryId').value = category ? category.id : '';
+        document.getElementById('categoryCode').value = category ? category.code : '';
+        document.getElementById('categoryName').value = category ? category.name : '';
+        document.getElementById('categoryDescription').value = category ? (category.description || '') : '';
+        document.getElementById('categoryModal').style.display = 'flex';
+    }
+
+    function closeCategoryModal() {
+        document.getElementById('categoryModal').style.display = 'none';
+    }
+
+    async function saveCategory(event) {
+        event.preventDefault();
+        const id = document.getElementById('categoryId').value;
+        const payload = {
+            code: document.getElementById('categoryCode').value.trim(),
+            name: document.getElementById('categoryName').value.trim(),
+            description: document.getElementById('categoryDescription').value.trim()
+        };
+
+        try {
+            const response = await fetch(id ? `/admin/categories/api/${id}` : '/admin/categories/api', {
+                method: id ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                closeCategoryModal();
+                loadCategories();
+                return;
+            }
+
+            const error = await response.json().catch(() => ({}));
+            alert(error.message || error.error || '保存分类失败');
+        } catch (error) {
+            console.error('保存分类失败:', error);
+            alert('保存分类失败，请稍后重试');
+        }
+    }
+
+    async function deleteCategory(category) {
+        if (!confirm(`确认删除分类 ${category.name}（${category.code}）？`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/categories/api/${category.id}`, { method: 'DELETE' });
+            if (response.ok) {
+                loadCategories();
+                return;
+            }
+            const error = await response.json().catch(() => ({}));
+            alert(error.message || error.error || '删除分类失败');
+        } catch (error) {
+            console.error('删除分类失败:', error);
+            alert('删除分类失败，请稍后重试');
+        }
+    }
+
+    async function logout() {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } finally {
+            window.location.href = '/login';
+        }
+    }
+
+    loadCategories();
+</script>
+</body>
+</html>
