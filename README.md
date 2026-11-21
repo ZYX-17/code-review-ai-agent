@@ -216,6 +216,33 @@ psql -U postgres -d code_guardian -f database/20260529/init_data_20260529.sql
 4. 审查完成后会自动在 PR 下评论，并更新 commit status（context 为 `codeguardian-ai`）
 5. 如需 commit status 跳转到报告页，设置 `PUBLIC_BASE_URL`（如 `https://your-domain.com`）
 
+## GitLab Webhook 与评论回写
+
+1. 创建 GitLab Personal Access Token，scope 勾选 `api`
+2. 本地填入 `config/application-local.yml` 的 `gitlab.api.token`；生产环境设置 `GITLAB_TOKEN`。
+   自建 GitLab 通过 `gitlab.api.base-url`（或 `GITLAB_API_URL`）指定，例如
+   `https://gitlab.example.com/api/v4`
+3. GitLab 项目 Settings → Webhooks 添加：
+   - URL：`https://你的域名/api/v1/webhook/gitlab`
+   - Secret token：与 `API_TOKEN` 相同（请求头 `X-Gitlab-Token`）
+   - 事件：`Merge request events`、`Push events`
+4. MR 审查完成后会回写评论并更新 commit status（name 为 `codeguardian-ai`）；
+   Push 事件只更新 commit status
+5. 未配置 `GITLAB_TOKEN` 时，`/api/v1/webhook/gitlab` 会回退使用 GitCode Token
+
+GitCode 的 Webhook 地址为 `/api/v1/webhook/gitcode`，同样支持 MR 与 Push 事件。
+
+### 增量审查
+
+Webhook 触发的审查默认只审查本次变更的文件：
+
+- GitHub PR：通过 Pull Request files API 获取变更文件
+- GitLab MR：通过 Merge Request diffs API 获取变更文件
+- Push 事件：直接使用 payload 中 `commits[].added/modified`
+
+获取不到变更列表（未配置 Token、API 失败或事件不含文件信息）时自动回退为全量审查。
+手动发起 `GIT` 类型审查时仍为全量审查，也可在请求体中传 `changedFiles` 指定范围。
+
 ## 项目结构
 
 ```

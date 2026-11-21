@@ -27,6 +27,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -234,9 +236,11 @@ public class ReviewService {
             String excludePaths = configService.getSettings().getExcludePaths();
 
             List<Path> files = codeParserService.scanDirectory(path, includePaths, excludePaths);
-            log.info("开始并行审查本地目录: taskId={}, path={}, 文件数={}", task.getId(), path, files.size());
-    
             final Path rootPath = Paths.get(path).toAbsolutePath().normalize();
+            files = filterByChangedFiles(files, rootPath, request.getChangedFiles());
+            log.info("开始并行审查本地目录: taskId={}, path={}, 文件数={}, 增量过滤={}",
+                    task.getId(), path, files.size(),
+                    request.getChangedFiles() != null && !request.getChangedFiles().isEmpty());
 
             futures = files.stream()
                 .map(filePath -> executor.submit(() -> {
@@ -274,6 +278,44 @@ public class ReviewService {
             String summary = reviewErrors.stream().distinct().limit(3).collect(Collectors.joining("; "));
             throw new RuntimeException("部分文件审查失败（" + reviewErrors.size() + " 个文件）: " + summary);
         }
+    }
+
+    /**
+     * 增量审查：只保留变更文件列表中的文件。
+     *
+     * @param files        扫描出的文件
+     * @param rootPath     扫描根目录（绝对路径）
+     * @param changedFiles 相对仓库根路径的变更文件；为空时返回原列表
+     */
+    static List<Path> filterByChangedFiles(List<Path> files, Path rootPath, List<String> changedFiles) {
+        if (changedFiles == null || changedFiles.isEmpty() || files == null || files.isEmpty()) {
+            return files;
+        }
+
+        Set<String> changed = changedFiles.stream()
+                .filter(Objects::nonNull)
+                .map(ReviewService::normalizeRelativePath)
+                .filter(path -> !path.isEmpty())
+                .collect(Collectors.toSet());
+        if (changed.isEmpty()) {
+            return files;
+        }
+
+        return files.stream()
+                .filter(file -> changed.contains(normalizeRelativePath(
+                        rootPath.relativize(file.toAbsolutePath().normalize()).toString())))
+                .collect(Collectors.toList());
+    }
+
+    static String normalizeRelativePath(String value) {
+        if (value == null) {
+            return "";
+        }
+        String path = value.trim().replace('\\', '/');
+        while (path.startsWith("./")) {
+            path = path.substring(2);
+        }
+        return path.replaceAll("^/+", "");
     }
 
     private List<Finding> reviewSingleFile(String relativePath, String content, ReviewRequestDTO request) {

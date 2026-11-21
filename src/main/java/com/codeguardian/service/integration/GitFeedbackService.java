@@ -23,7 +23,7 @@ public class GitFeedbackService {
     @Value("${gitcode.api.base-url:https://api.gitcode.com/api/v5}")
     private String baseUrl;
 
-    @Value("${gitcode.token:}")
+    @Value("${gitcode.api.token:}")
     private String token;
 
     private final RestClient.Builder restClientBuilder;

@@ -53,6 +53,13 @@ github:
     token: ""
     base-url: https://api.github.com
 
+gitlab:
+  api:
+    # 填入 GitLab Personal Access Token（api scope）后启用 MR 评论与 commit status
+    token: ""
+    # 自建 GitLab 填 https://你的域名/api/v4
+    base-url: https://gitlab.com/api/v4
+
 logging:
   level:
     com.codeguardian: DEBUG

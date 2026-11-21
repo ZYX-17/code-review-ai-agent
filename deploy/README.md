@@ -42,6 +42,9 @@ cp deploy/.env.example .env
 chmod 600 .env
 ```
 
+> 需要 Webhook 评论回写时，再填写 `.env` 中的 `API_TOKEN`、`GITHUB_TOKEN`、
+> `GITLAB_TOKEN`/`GITLAB_API_URL`；`PUBLIC_BASE_URL` 用于在 commit status 中链接报告页。
+
 ## 3. 登录 GHCR
 
 GitHub Actions 推送的镜像在私有 GHCR 中，服务器需要能拉取。

@@ -43,6 +43,8 @@ public class CicdController {
                 .gitCommit(request.getCommitHash())
                 .rulesOnly(request.getRulesOnly())
                 .ruleTemplate(request.getRuleTemplate())
+                .changedFiles(request.getChangedFiles() != null && !request.getChangedFiles().isEmpty()
+                        ? request.getChangedFiles() : null)
                 .taskName("CI-" + (request.getTriggerBy() != null ? request.getTriggerBy() : "AUTO") + "-" + System.currentTimeMillis())
                 .build();
 

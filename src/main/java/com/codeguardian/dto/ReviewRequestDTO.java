@@ -111,4 +111,10 @@ public class ReviewRequestDTO {
      * 知识库范围（可选，空表示全部知识库）
      */
     private java.util.List<Long> knowledgeBaseIds;
+
+    /**
+     * 增量审查范围：仅审查这些文件（相对仓库根路径）。
+     * 为空时审查扫描范围内的全部文件，主要用于 PR/MR 与 Push 事件。
+     */
+    private java.util.List<String> changedFiles;
 }

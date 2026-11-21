@@ -1,5 +1,6 @@
 package com.codeguardian.service.integration;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +13,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -87,6 +90,48 @@ public class GitHubFeedbackService {
         send("POST", url, payload);
     }
 
+    /**
+     * 获取 PR 的变更文件列表（仓库根路径相对路径）
+     *
+     * <p>用于增量审查；最多拉取 1000 个文件。未配置 Token 或请求失败时返回空列表，
+     * 调用方应回退到全量审查。</p>
+     */
+    public List<String> listPullRequestFiles(String repoFullName, int prNumber) {
+        List<String> files = new ArrayList<>();
+        if (!isConfigured()) {
+            log.info("GITHUB_TOKEN 未配置，跳过获取 PR 变更文件: {}#{}", repoFullName, prNumber);
+            return files;
+        }
+
+        try {
+            for (int page = 1; page <= 10; page++) {
+                String url = baseUrl + "/repos/" + repoFullName + "/pulls/" + prNumber
+                        + "/files?per_page=100&page=" + page;
+                String body = getJson(url);
+                if (body == null) {
+                    break;
+                }
+                JsonNode array = objectMapper.readTree(body);
+                if (!array.isArray() || array.isEmpty()) {
+                    break;
+                }
+                for (JsonNode node : array) {
+                    String filename = node.path("filename").asText(null);
+                    if (StringUtils.hasText(filename)) {
+                        files.add(filename);
+                    }
+                }
+                if (array.size() < 100) {
+                    break;
+                }
+            }
+            log.info("获取 PR {}#{} 变更文件 {} 个", repoFullName, prNumber, files.size());
+        } catch (Exception e) {
+            log.warn("获取 PR 变更文件失败: {}#{}: {}", repoFullName, prNumber, e.getMessage());
+        }
+        return files;
+    }
+
     private void send(String method, String url, Object payload) {
         try {
             String json = objectMapper.writeValueAsString(payload);
@@ -110,6 +155,29 @@ public class GitHubFeedbackService {
         } catch (Exception e) {
             log.warn("GitHub API 调用异常: {} {}: {}", method, url, e.getMessage());
         }
+    }
+
+    private String getJson(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(15))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .header("User-Agent", "CodeGuardian-AI")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return response.body();
+            }
+            log.warn("GitHub API 调用失败: GET {} -> {} {}", url,
+                    response.statusCode(), response.body());
+        } catch (Exception e) {
+            log.warn("GitHub API 调用异常: GET {}: {}", url, e.getMessage());
+        }
+        return null;
     }
 
     private String truncate(String value, int maxLength) {

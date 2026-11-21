@@ -169,11 +169,19 @@ server:
 gitcode:
   api:
     base-url: https://api.gitcode.com/api/v5
+    token: ${GITCODE_TOKEN:}
 
 github:
   api:
     token: ${GITHUB_TOKEN:}
     base-url: ${GITHUB_API_URL:https://api.github.com}
+
+gitlab:
+  api:
+    # 用于 MR 评论与 commit status 回写；未配置时回退到 GitCode Token
+    token: ${GITLAB_TOKEN:}
+    # 自建 GitLab 示例：https://gitlab.example.com/api/v4
+    base-url: ${GITLAB_API_URL:https://gitlab.com/api/v4}
 
 djl:
   cache:

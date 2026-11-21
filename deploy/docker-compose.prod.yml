@@ -83,6 +83,8 @@ services:
       API_TOKEN: ${API_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
+      GITLAB_API_URL: ${GITLAB_API_URL:-https://gitlab.com/api/v4}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx2g}
       DJL_CACHE_DIR: /tmp/djl-cache
