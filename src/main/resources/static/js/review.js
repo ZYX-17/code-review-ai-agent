@@ -2670,6 +2670,15 @@ async function pollTaskStatus(taskId) {
     throw new Error('审查任务执行超时，请稍后在历史记录中查看结果');
 }
 
+function getSelectedKnowledgeBaseIds() {
+    const select = document.getElementById('knowledgeBaseSelect');
+    if (!select || !select.value) {
+        return [];
+    }
+    const id = parseInt(select.value, 10);
+    return Number.isFinite(id) ? [id] : [];
+}
+
 // 开始审查
 async function startReview() {
     const codeTypeSelect = document.getElementById('codeTypeSelect');
@@ -2781,7 +2790,8 @@ async function startReview() {
                     codeSnippet: inputContent,
                     language: 'java',
                     reviewType: 'SNIPPET',
-                    modelProvider: modelProvider
+                    modelProvider: modelProvider,
+                    knowledgeBaseIds: getSelectedKnowledgeBaseIds()
                 };
                 break;
             case 'file':
@@ -2795,7 +2805,8 @@ async function startReview() {
                     filePath: selectedFile.name,
                     files: [{ path: selectedFile.name.replace(/\\/g, '/'), content: selectedFileContent }],
                     reviewType: 'FILE',
-                    modelProvider: modelProvider
+                    modelProvider: modelProvider,
+                    knowledgeBaseIds: getSelectedKnowledgeBaseIds()
                 };
                 break;
             case 'directory':
@@ -2803,7 +2814,8 @@ async function startReview() {
                 requestBody = {
                     directoryPath: selectedDirectory || '',
                     reviewType: 'DIRECTORY',
-                    modelProvider: modelProvider
+                    modelProvider: modelProvider,
+                    knowledgeBaseIds: getSelectedKnowledgeBaseIds()
                 };
                 
                 // 如果有上传的文件，添加到请求体中
@@ -2876,7 +2888,8 @@ async function startReview() {
                 requestBody = {
                     projectPath: selectedDirectory || '',
                     reviewType: 'PROJECT',
-                    modelProvider: modelProvider
+                    modelProvider: modelProvider,
+                    knowledgeBaseIds: getSelectedKnowledgeBaseIds()
                 };
                 
                 // 如果有上传的文件，添加到请求体中
@@ -2909,7 +2922,8 @@ async function startReview() {
                     password: gitConfig.password,
                     projectPath: gitConfig.localPath, // 必须传递本地路径
                     reviewType: 'GIT',
-                    modelProvider: modelProvider
+                    modelProvider: modelProvider,
+                    knowledgeBaseIds: getSelectedKnowledgeBaseIds()
                 };
                 break;
             default:

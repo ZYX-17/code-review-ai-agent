@@ -3,6 +3,7 @@ package com.codeguardian.controller;
 import com.codeguardian.model.dto.SettingsDTO;
 import com.codeguardian.service.SystemConfigService;
 import com.codeguardian.service.ai.factory.ChatClientFactory;
+import com.codeguardian.service.rag.KnowledgeBaseManagementService;
 import com.codeguardian.enums.ModelProviderEnum;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,8 @@ class ReviewPageControllerTest {
     void should_expose_available_models_when_provider_configured() {
         SystemConfigService configService = mock(SystemConfigService.class);
         ChatClientFactory chatClientFactory = mock(ChatClientFactory.class);
-        ReviewPageController controller = new ReviewPageController(configService, chatClientFactory);
+        KnowledgeBaseManagementService knowledgeBaseManagementService = mock(KnowledgeBaseManagementService.class);
+        ReviewPageController controller = new ReviewPageController(configService, chatClientFactory, knowledgeBaseManagementService);
         SettingsDTO settings = new SettingsDTO();
         settings.setProjectRoot("/workspace/demo");
         settings.setIncludePaths("src/**");
@@ -48,7 +50,8 @@ class ReviewPageControllerTest {
     void should_hide_model_selection_when_no_provider_configured() {
         SystemConfigService configService = mock(SystemConfigService.class);
         ChatClientFactory chatClientFactory = mock(ChatClientFactory.class);
-        ReviewPageController controller = new ReviewPageController(configService, chatClientFactory);
+        KnowledgeBaseManagementService knowledgeBaseManagementService = mock(KnowledgeBaseManagementService.class);
+        ReviewPageController controller = new ReviewPageController(configService, chatClientFactory, knowledgeBaseManagementService);
         Model model = new ExtendedModelMap();
 
         when(configService.getSettings()).thenReturn(new SettingsDTO());

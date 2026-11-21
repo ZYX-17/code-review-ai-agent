@@ -1,11 +1,17 @@
 package com.codeguardian.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.codeguardian.annotation.OperationLogRecord;
+import com.codeguardian.dto.KnowledgeBaseRequestDTO;
+import com.codeguardian.dto.KnowledgeBaseStatsDTO;
 import com.codeguardian.service.CategoryService;
+import com.codeguardian.service.rag.KnowledgeBase;
+import com.codeguardian.service.rag.KnowledgeBaseManagementService;
 import com.codeguardian.service.rag.KnowledgeBaseService;
 import com.codeguardian.service.rag.KnowledgeDocument;
 import com.codeguardian.util.ViewModelUtils;
 import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
@@ -30,6 +36,7 @@ import java.util.Map;
 public class KnowledgeBaseController {
 
     private final KnowledgeBaseService knowledgeBaseService;
+    private final KnowledgeBaseManagementService knowledgeBaseManagementService;
     private final CategoryService categoryService;
 
     @GetMapping
@@ -37,11 +44,22 @@ public class KnowledgeBaseController {
     public String list(Model model, HttpSession session,
                        @RequestParam(defaultValue = "1") int page,
                        @RequestParam(defaultValue = "6") int size,
-                       @RequestParam(required = false) String keyword) {
+                       @RequestParam(required = false) String keyword,
+                       @RequestParam(required = false) Long kbId) {
         ViewModelUtils.populateUserInfo(model, session);
-        Page<KnowledgeDocument> docPage = knowledgeBaseService.getDocuments(page, size, keyword);
+        Page<KnowledgeDocument> docPage = knowledgeBaseService.getDocuments(page, size, keyword, kbId);
+
+        List<KnowledgeBaseStatsDTO> allBases = knowledgeBaseManagementService.listStats();
+        List<KnowledgeBaseStatsDTO> enabledBases = allBases.stream()
+                .filter(kb -> Boolean.TRUE.equals(kb.getEnabled()))
+                .toList();
+
         model.addAttribute("page", docPage);
         model.addAttribute("keyword", keyword);
+        model.addAttribute("kbId", kbId);
+        model.addAttribute("knowledgeBases", enabledBases);
+        model.addAttribute("kbNames", allBases.stream()
+                .collect(java.util.stream.Collectors.toMap(KnowledgeBaseStatsDTO::getId, KnowledgeBaseStatsDTO::getName)));
         model.addAttribute("categories", categoryService.listAll());
         model.addAttribute("activeTab", "documents");
         return "admin/knowledge";
@@ -51,10 +69,54 @@ public class KnowledgeBaseController {
     @SaCheckPermission("ADMIN")
     public String bases(Model model, HttpSession session) {
         ViewModelUtils.populateUserInfo(model, session);
-        Map<String, Object> stats = knowledgeBaseService.getStats();
-        model.addAttribute("kb", stats);
+        model.addAttribute("bases", knowledgeBaseManagementService.listStats());
         model.addAttribute("activeTab", "bases");
         return "admin/knowledge-bases";
+    }
+
+    /**
+     * 知识库列表（API）
+     */
+    @GetMapping("/bases/api")
+    @ResponseBody
+    @SaCheckPermission("ADMIN")
+    public ResponseEntity<List<KnowledgeBaseStatsDTO>> listBases() {
+        return ResponseEntity.ok(knowledgeBaseManagementService.listStats());
+    }
+
+    /**
+     * 创建知识库（API）
+     */
+    @PostMapping("/bases/api")
+    @ResponseBody
+    @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "知识库管理", action = "创建知识库")
+    public ResponseEntity<KnowledgeBase> createBase(@Valid @RequestBody KnowledgeBaseRequestDTO request) {
+        return ResponseEntity.ok(knowledgeBaseManagementService.create(request));
+    }
+
+    /**
+     * 更新知识库（API）
+     */
+    @PutMapping("/bases/api/{id}")
+    @ResponseBody
+    @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "知识库管理", action = "更新知识库")
+    public ResponseEntity<KnowledgeBase> updateBase(@PathVariable("id") Long id,
+                                                    @Valid @RequestBody KnowledgeBaseRequestDTO request) {
+        return ResponseEntity.ok(knowledgeBaseManagementService.update(id, request));
+    }
+
+    /**
+     * 删除知识库（API）
+     */
+    @DeleteMapping("/bases/api/{id}")
+    @ResponseBody
+    @SaCheckPermission("ADMIN")
+    @OperationLogRecord(module = "知识库管理", action = "删除知识库")
+    public ResponseEntity<Void> deleteBase(@PathVariable("id") Long id) {
+        knowledgeBaseManagementService.delete(id);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/detail/{id}")
@@ -106,6 +168,7 @@ public class KnowledgeBaseController {
     @SaCheckPermission("ADMIN")
     public String upload(@RequestParam("file") MultipartFile file,
                          @RequestParam(value = "category", required = false) String category,
+                         @RequestParam(value = "kbId", required = false) Long kbId,
                          RedirectAttributes redirectAttributes) {
         if (file.isEmpty()) {
             redirectAttributes.addFlashAttribute("error", "请选择文件");
@@ -114,7 +177,7 @@ public class KnowledgeBaseController {
 
         try {
             // Support generic document upload (Tika handles formats)
-            knowledgeBaseService.uploadDocument(file, category);
+            knowledgeBaseService.uploadDocument(file, category, kbId);
             redirectAttributes.addFlashAttribute("success", "文档上传成功并已处理");
         } catch (Exception e) {
             log.error("Upload failed", e);

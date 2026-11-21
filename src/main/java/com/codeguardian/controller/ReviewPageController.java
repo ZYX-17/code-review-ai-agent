@@ -20,6 +20,7 @@ public class ReviewPageController {
 
     private final com.codeguardian.service.SystemConfigService configService;
     private final ChatClientFactory chatClientFactory;
+    private final com.codeguardian.service.rag.KnowledgeBaseManagementService knowledgeBaseManagementService;
     
     /**
      * 代码审查页面
@@ -39,6 +40,7 @@ public class ReviewPageController {
         model.addAttribute("availableModelProviders", chatClientFactory.getAvailableProviders());
         model.addAttribute("hasAvailableModelProviders", chatClientFactory.hasAvailableProviders());
         model.addAttribute("defaultModelProvider", chatClientFactory.getDefaultProvider());
+        model.addAttribute("knowledgeBases", knowledgeBaseManagementService.getEnabledBases());
         
         return "review";
     }

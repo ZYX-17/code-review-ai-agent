@@ -155,10 +155,27 @@ CREATE TABLE categories (
   updated_at TIMESTAMPTZ
 );
 
+-- 2.10 知识库
+DROP TABLE IF EXISTS knowledge_bases CASCADE;
+CREATE TABLE knowledge_bases (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(128) NOT NULL,
+  description TEXT,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ
+);
+
+INSERT INTO knowledge_bases (id, name, description, enabled)
+VALUES (1, '默认知识库', '系统默认知识库，存储所有上传的代码规范和技术文档', TRUE)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('knowledge_bases_id_seq', GREATEST((SELECT MAX(id) FROM knowledge_bases), 1));
+
 -- 2.11 知识库文档（与 KnowledgeDocument.java 对齐）
 DROP TABLE IF EXISTS knowledge_documents CASCADE;
 CREATE TABLE knowledge_documents (
   id VARCHAR(64) PRIMARY KEY,
+  kb_id BIGINT NOT NULL DEFAULT 1 REFERENCES knowledge_bases(id),
   title VARCHAR(255) NOT NULL,
   content TEXT,
   solution TEXT,
@@ -170,6 +187,8 @@ CREATE TABLE knowledge_documents (
   file_size BIGINT,
   create_time TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_kb_id ON knowledge_documents(kb_id);
 
 -- 2.12 操作日志（保留）
 DROP TABLE IF EXISTS operation_logs CASCADE;

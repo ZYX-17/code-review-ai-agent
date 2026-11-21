@@ -42,6 +42,8 @@ public class KnowledgeBaseServiceTest {
     private MinioStorageService minioStorageService;
     @Mock
     private JdbcTemplate jdbcTemplate;
+    @Mock
+    private KnowledgeBaseManagementService knowledgeBaseManagementService;
 
     @InjectMocks
     private KnowledgeBaseService knowledgeBaseService;
@@ -59,6 +61,8 @@ public class KnowledgeBaseServiceTest {
         when(jdbcTemplate.queryForObject(any(String.class), eq(Integer.class))).thenReturn(0);
         doReturn(Collections.emptyList()).when(objectMapper).readValue(any(InputStream.class), any(TypeReference.class));
         when(repository.findAll()).thenReturn(List.of(fullDoc));
+        when(knowledgeBaseManagementService.getDefaultBase()).thenReturn(
+                KnowledgeBase.builder().id(1L).name("默认知识库").enabled(true).build());
 
         java.lang.reflect.Field vectorStoreField = KnowledgeBaseService.class.getDeclaredField("vectorStore");
         vectorStoreField.setAccessible(true);

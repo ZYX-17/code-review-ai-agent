@@ -52,8 +52,11 @@ public class KnowledgeBaseService {
     private final KnowledgeDocumentRepository repository;
     private final MinioStorageService minioStorageService;
     private final JdbcTemplate jdbcTemplate;
+    private final KnowledgeBaseManagementService knowledgeBaseManagementService;
     @org.springframework.beans.factory.annotation.Value("${app.rag.vectorize-on-startup:false}")
     private boolean vectorizeOnStartup;
+
+    private Long defaultKbId = 1L;
     
     // 原始文档列表 (用于 BM25 构建)
     private List<KnowledgeDocument> documents = new ArrayList<>();
@@ -71,6 +74,8 @@ public class KnowledgeBaseService {
     @PostConstruct
     public void init() {
         try {
+            defaultKbId = knowledgeBaseManagementService.getDefaultBase().getId();
+
             // 0. Check and Fix Vector Schema (Auto-healing for dimension mismatch)
             checkAndFixVectorSchema();
 
@@ -181,6 +186,7 @@ public class KnowledgeBaseService {
 
                     KnowledgeDocument doc = KnowledgeDocument.builder()
                             .id(id)
+                            .kbId(defaultKbId)
                             .title(title)
                             .content(content)
                             .solution(solution)
@@ -229,6 +235,7 @@ public class KnowledgeBaseService {
         }
         for (Document chunk : chunks) {
             chunk.getMetadata().put("source_doc_id", doc.getId());
+            chunk.getMetadata().put("kb_id", doc.getKbId());
         }
         try {
             vectorStore.add(chunks);
@@ -241,15 +248,23 @@ public class KnowledgeBaseService {
      * 上传并处理文档 (支持多种格式)
      */
     public void uploadDocument(MultipartFile file) throws IOException {
-        uploadDocument(file, "CODE_STYLE");
+        uploadDocument(file, "CODE_STYLE", null);
     }
 
     /**
      * 上传并处理文档，并指定分类
      */
     public void uploadDocument(MultipartFile file, String category) throws IOException {
-        log.info("Starting document upload process for file: {}, category: {}, size: {}",
-                file.getOriginalFilename(), category, file.getSize());
+        uploadDocument(file, category, null);
+    }
+
+    /**
+     * 上传并处理文档，并指定分类和知识库
+     */
+    public void uploadDocument(MultipartFile file, String category, Long kbId) throws IOException {
+        Long resolvedKbId = resolveKbId(kbId);
+        log.info("Starting document upload process for file: {}, category: {}, kbId: {}, size: {}",
+                file.getOriginalFilename(), category, resolvedKbId, file.getSize());
         try {
             // Upload to MinIO
             log.info("Uploading file to MinIO...");
@@ -272,6 +287,7 @@ public class KnowledgeBaseService {
             String id = UUID.randomUUID().toString();
             KnowledgeDocument doc = KnowledgeDocument.builder()
                 .id(id)
+                .kbId(resolvedKbId)
                 .title(file.getOriginalFilename())
                 .content(text)
                 .category(resolveCategory(category))
@@ -310,14 +326,33 @@ public class KnowledgeBaseService {
         return category.trim().toUpperCase();
     }
 
-    public Page<KnowledgeDocument> getDocuments(int page, int size, String keyword) {
-        // 使用 Sort.unsorted()，因为排序已经在 Repository 的 @Query 中指定了
-        Pageable pageable = PageRequest.of(page - 1, size, Sort.unsorted());
-        
-        if (keyword != null && !keyword.isEmpty()) {
-            return repository.findByTitleContainingIgnoreCaseNullsLast(keyword, pageable);
+    private Long resolveKbId(Long kbId) {
+        if (kbId == null) {
+            return defaultKbId;
         }
-        return repository.findAllNullsLast(pageable);
+        if (!knowledgeBaseManagementService.exists(kbId)) {
+            throw new IllegalArgumentException("知识库不存在: " + kbId);
+        }
+        return kbId;
+    }
+
+    public Page<KnowledgeDocument> getDocuments(int page, int size, String keyword) {
+        return getDocuments(page, size, keyword, null);
+    }
+
+    public Page<KnowledgeDocument> getDocuments(int page, int size, String keyword, Long kbId) {
+        Pageable pageable = PageRequest.of(page - 1, size, Sort.unsorted());
+        boolean hasKeyword = keyword != null && !keyword.isEmpty();
+
+        if (kbId != null) {
+            return hasKeyword
+                    ? repository.findByKbIdAndTitleContainingIgnoreCaseNullsLast(kbId, keyword, pageable)
+                    : repository.findAllByKbIdNullsLast(kbId, pageable);
+        }
+
+        return hasKeyword
+                ? repository.findByTitleContainingIgnoreCaseNullsLast(keyword, pageable)
+                : repository.findAllNullsLast(pageable);
     }
 
     public KnowledgeDocument getDocumentById(String id) {
@@ -447,25 +482,37 @@ public class KnowledgeBaseService {
      * 执行混合检索 (Hybrid Search)
      */
     public List<KnowledgeDocument> search(String query, int topK) {
+        return search(query, topK, null);
+    }
+
+    /**
+     * 执行混合检索，可按知识库过滤
+     */
+    public List<KnowledgeDocument> search(String query, int topK, List<Long> kbIds) {
         if (documents.isEmpty()) return Collections.emptyList();
-        
+
         // 1. 向量检索
         List<Document> vectorResults = Collections.emptyList();
         if (vectorStore != null) {
             try {
-                vectorResults = vectorStore.similaritySearch(
-                    SearchRequest.query(query).withTopK(topK)
-                );
+                SearchRequest request = SearchRequest.query(query).withTopK(topK);
+                if (kbIds != null && !kbIds.isEmpty()) {
+                    request = request.withFilterExpression(
+                            new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
+                                    .in("kb_id", kbIds)
+                                    .build());
+                }
+                vectorResults = vectorStore.similaritySearch(request);
             } catch (Exception e) {
                 log.debug("Vector search failed (using BM25 only): {}", e.getMessage());
             }
         }
-        
+
         // 2. BM25 检索
-        List<Integer> bm25Indices = searchBM25(query, topK);
-        
+        List<Integer> bm25Indices = searchBM25(query, topK, kbIds);
+
         // 3. 结果融合与重排序
-        return mergeAndRerank(vectorResults, bm25Indices, topK);
+        return mergeAndRerank(vectorResults, bm25Indices, topK, kbIds);
     }
     
     /**
@@ -473,16 +520,29 @@ public class KnowledgeBaseService {
      * 用于 RAG 上下文构建，避免 Token 超限
      */
     public List<String> searchSnippets(String query, int topK) {
+        return searchSnippets(query, topK, null);
+    }
+
+    /**
+     * 搜索相关片段，可按知识库过滤
+     */
+    public List<String> searchSnippets(String query, int topK, List<Long> kbIds) {
         // 1. 优先使用向量检索获取精确片段
         if (vectorStore != null) {
             try {
-                List<Document> vectorResults = vectorStore.similaritySearch(
-                    SearchRequest.query(query).withTopK(topK)
-                );
-                
+                SearchRequest request = SearchRequest.query(query).withTopK(topK);
+                if (kbIds != null && !kbIds.isEmpty()) {
+                    request = request.withFilterExpression(
+                            new org.springframework.ai.vectorstore.filter.FilterExpressionBuilder()
+                                    .in("kb_id", kbIds)
+                                    .build());
+                }
+                List<Document> vectorResults = vectorStore.similaritySearch(request);
+
                 if (!vectorResults.isEmpty()) {
                     log.info("Found {} snippets via Vector Search", vectorResults.size());
                     return vectorResults.stream()
+                            .filter(doc -> matchesKbMetadata(doc, kbIds))
                             .map(doc -> {
                                  String title = (String) doc.getMetadata().getOrDefault("title", "");
                                  String content = sanitizeRagText(doc.getContent());
@@ -499,7 +559,7 @@ public class KnowledgeBaseService {
         
         // 2. 如果向量检索无果，回退到混合检索（但截断内容）
         log.info("Vector search empty/failed, falling back to document search");
-        List<KnowledgeDocument> docs = search(query, topK);
+        List<KnowledgeDocument> docs = search(query, topK, kbIds);
         return docs.stream()
                 .map(doc -> {
                     String content = doc.getContent();
@@ -543,6 +603,10 @@ public class KnowledgeBaseService {
     }
 
     private List<Integer> searchBM25(String query, int topK) {
+        return searchBM25(query, topK, null);
+    }
+
+    private List<Integer> searchBM25(String query, int topK, List<Long> kbIds) {
         List<String> queryTerms = tokenize(query.toLowerCase());
         Map<Integer, Double> scores = new HashMap<>();
         
@@ -567,38 +631,67 @@ public class KnowledgeBaseService {
         }
         
         return scores.entrySet().stream()
+                .filter(entry -> entry.getKey() < documents.size())
+                .filter(entry -> inKb(documents.get(entry.getKey()), kbIds))
                 .sorted(Map.Entry.<Integer, Double>comparingByValue().reversed())
                 .limit(topK)
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
     }
 
-    private List<KnowledgeDocument> mergeAndRerank(List<Document> vectorDocs, List<Integer> bm25Indices, int topK) {
+    private List<KnowledgeDocument> mergeAndRerank(List<Document> vectorDocs, List<Integer> bm25Indices,
+                                                   int topK, List<Long> kbIds) {
         Map<String, Double> rrfScores = new HashMap<>();
         int k = 60;
-        
+
         if (vectorDocs != null) {
             for (int i = 0; i < vectorDocs.size(); i++) {
                 Document doc = vectorDocs.get(i);
+                if (!matchesKbMetadata(doc, kbIds)) {
+                    continue;
+                }
                 // 尝试从 metadata 获取 source_doc_id，如果不存在则使用 docId
                 String id = (String) doc.getMetadata().getOrDefault("source_doc_id", doc.getId());
                 rrfScores.put(id, rrfScores.getOrDefault(id, 0.0) + 1.0 / (k + i + 1));
             }
         }
-        
+
         for (int i = 0; i < bm25Indices.size(); i++) {
-            if (bm25Indices.get(i) < documents.size()) {
-                String id = documents.get(bm25Indices.get(i)).getId();
+            int docIndex = bm25Indices.get(i);
+            if (docIndex < documents.size() && inKb(documents.get(docIndex), kbIds)) {
+                String id = documents.get(docIndex).getId();
                 rrfScores.put(id, rrfScores.getOrDefault(id, 0.0) + 1.0 / (k + i + 1));
             }
         }
-        
+
         return rrfScores.entrySet().stream()
                 .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
                 .limit(topK)
                 .map(e -> findDocById(e.getKey()))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+    }
+
+    private boolean inKb(KnowledgeDocument doc, List<Long> kbIds) {
+        if (kbIds == null || kbIds.isEmpty()) {
+            return true;
+        }
+        return doc.getKbId() != null && kbIds.contains(doc.getKbId());
+    }
+
+    private boolean matchesKbMetadata(Document doc, List<Long> kbIds) {
+        if (kbIds == null || kbIds.isEmpty()) {
+            return true;
+        }
+        Object value = doc.getMetadata().get("kb_id");
+        if (value == null) {
+            return false;
+        }
+        try {
+            return kbIds.contains(Long.valueOf(String.valueOf(value)));
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
     
     private KnowledgeDocument findDocById(String id) {

@@ -22,7 +22,10 @@ import java.util.Map;
 public class KnowledgeDocument {
     @Id
     private String id;
-    
+
+    @Column(name = "kb_id", nullable = false)
+    private Long kbId;
+
     @Column(nullable = false)
     private String title;
     
@@ -55,6 +58,12 @@ public class KnowledgeDocument {
     }
 
     public Document toDocument() {
-        return new Document(id, content, metadata != null ? metadata : Map.of());
+        java.util.Map<String, Object> meta = metadata != null
+                ? new java.util.HashMap<>(metadata)
+                : new java.util.HashMap<>();
+        if (kbId != null) {
+            meta.put("kb_id", kbId);
+        }
+        return new Document(id, content, meta);
     }
 }

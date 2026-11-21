@@ -198,6 +198,12 @@
                                 <h3 class="upload-title"><i class="fas fa-file-alt" style="color: #3498db;"></i> 上传文档</h3>
                                 <p class="upload-desc">支持 PDF、Word、Excel、PowerPoint、TXT、Markdown 等格式。上传的代码规范或技术文档将被解析并存入向量知识库，用于辅助代码审查。</p>
                                 <form action="/admin/knowledge/upload" method="post" enctype="multipart/form-data" class="upload-form">
+                                    <select name="kbId" class="filter-select" style="margin-right: 10px;" title="所属知识库">
+                                        <option th:each="kb : ${knowledgeBases}"
+                                                th:value="${kb.id}"
+                                                th:text="${kb.name}"
+                                                th:selected="${kbId != null and kbId == kb.id}"></option>
+                                    </select>
                                     <select name="category" class="filter-select" style="margin-right: 10px;">
                                         <option th:each="cat : ${categories}"
                                                 th:value="${cat.code}"
@@ -212,6 +218,13 @@
 
                             <!-- 搜索框 -->
                             <form action="/admin/knowledge" method="get" class="search-form">
+                                <select name="kbId" class="filter-select" onchange="this.form.submit()" style="margin-right: 10px;">
+                                    <option value="">全部知识库</option>
+                                    <option th:each="kb : ${knowledgeBases}"
+                                            th:value="${kb.id}"
+                                            th:text="${kb.name}"
+                                            th:selected="${kbId != null and kbId == kb.id}"></option>
+                                </select>
                                 <input type="text" name="keyword" class="search-input" placeholder="搜索文档标题..." th:value="${keyword}">
                                 <button type="submit" class="search-btn"><i class="fas fa-search"></i> 搜索</button>
                             </form>
@@ -223,6 +236,7 @@
                                         <tr>
                                             <th style="width: 25%;">ID</th>
                                             <th style="width: 20%;">标题</th>
+                                            <th style="width: 12%;">知识库</th>
                                             <th style="width: 10%;">类别</th>
                                             <th style="width: 20%;">内容预览</th>
                                             <th style="width: 15%;">上传时间</th>
@@ -235,6 +249,9 @@
                                             <td>
                                                 <i class="fas fa-file-alt" style="color: #3498db; margin-right: 5px;"></i>
                                                 <a th:href="@{/admin/knowledge/detail/{id}(id=${doc.id})}" th:text="${doc.title}" style="color: var(--primary-color); text-decoration: none;">标题</a>
+                                            </td>
+                                            <td>
+                                                <span class="status-tag active" th:text="${kbNames.get(doc.kbId) != null ? kbNames.get(doc.kbId) : '默认知识库'}">知识库</span>
                                             </td>
                                             <td>
                                                 <span class="status-tag active" th:text="${doc.category != null ? doc.category : '未分类'}">类别</span>
@@ -253,7 +270,7 @@
                                             </td>
                                         </tr>
                                         <tr th:if="${page.empty}">
-                                            <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary-color);">
+                                            <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-secondary-color);">
                                                 <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 10px; display: block; opacity: 0.5;"></i>
                                                 暂无知识库文档，请上传文档文件
                                             </td>

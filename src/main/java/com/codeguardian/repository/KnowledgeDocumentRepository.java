@@ -17,6 +17,16 @@ public interface KnowledgeDocumentRepository extends JpaRepository<KnowledgeDocu
 
     @Query("SELECT d FROM KnowledgeDocument d WHERE LOWER(d.title) LIKE LOWER(CONCAT('%', :title, '%')) ORDER BY d.createTime DESC NULLS LAST")
     Page<KnowledgeDocument> findByTitleContainingIgnoreCaseNullsLast(@Param("title") String title, Pageable pageable);
-    
+
     Page<KnowledgeDocument> findByTitleContainingIgnoreCase(String title, Pageable pageable);
+
+    @Query("SELECT d FROM KnowledgeDocument d WHERE d.kbId = :kbId ORDER BY d.createTime DESC NULLS LAST")
+    Page<KnowledgeDocument> findAllByKbIdNullsLast(@Param("kbId") Long kbId, Pageable pageable);
+
+    @Query("SELECT d FROM KnowledgeDocument d WHERE d.kbId = :kbId " +
+           "AND LOWER(d.title) LIKE LOWER(CONCAT('%', :title, '%')) ORDER BY d.createTime DESC NULLS LAST")
+    Page<KnowledgeDocument> findByKbIdAndTitleContainingIgnoreCaseNullsLast(
+            @Param("kbId") Long kbId, @Param("title") String title, Pageable pageable);
+
+    long countByKbId(Long kbId);
 }

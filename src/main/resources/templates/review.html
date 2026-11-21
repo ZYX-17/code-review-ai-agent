@@ -69,6 +69,12 @@
                             <input type="checkbox" id="ragEnhancementCheckbox" style="margin-right: 5px;" checked>
                             <label for="ragEnhancementCheckbox" style="font-size: 14px; color: var(--text-color); cursor: pointer;">RAG增强</label>
                         </div>
+                        <select class="template-select" id="knowledgeBaseSelect" title="知识库范围"
+                                style="margin-left: 10px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background-color: var(--bg-color); color: var(--text-color);"
+                                th:if="${!#lists.isEmpty(knowledgeBases)}">
+                            <option value="">全部知识库</option>
+                            <option th:each="kb : ${knowledgeBases}" th:value="${kb.id}" th:text="${kb.name}"></option>
+                        </select>
                         <button class="start-review-btn" id="startReviewBtn" onclick="startReview()" th:if="${canReview}">
                             <i class="fas fa-play"></i> 开始审查
                         </button>

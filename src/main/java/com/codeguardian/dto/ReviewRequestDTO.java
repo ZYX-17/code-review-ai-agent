@@ -106,4 +106,9 @@ public class ReviewRequestDTO {
      * 是否启用RAG知识库增强
      */
     private Boolean enableRag;
+
+    /**
+     * 知识库范围（可选，空表示全部知识库）
+     */
+    private java.util.List<Long> knowledgeBaseIds;
 }

@@ -362,16 +362,24 @@ public class ReviewService {
             final ModelProviderEnum provider = resolvedProvider;
             final String providerNameForAi = provider != null ? provider.name() : requestedProvider;
             final int blockStartLine = 1;
-            findings = fingerprintCacheService
-                    .tryGetCachedFindings(codeContent, language, provider, enableRag, blockStartLine)
+            final List<Long> knowledgeBaseIds = request.getKnowledgeBaseIds();
+            // 指定了知识库范围时跳过语义缓存，避免命中其他知识库的结果
+            final boolean canUseCache = knowledgeBaseIds == null || knowledgeBaseIds.isEmpty();
+            findings = (canUseCache
+                    ? fingerprintCacheService.tryGetCachedFindings(codeContent, language, provider, enableRag, blockStartLine)
+                    : java.util.Optional.<List<Finding>>empty())
                     .orElseGet(() -> {
                         List<Finding> fresh = aiModelService.reviewCode(
                                 codeContent,
                                 language,
                                 providerNameForAi,
-                                enableRag
+                                enableRag,
+                                null,
+                                knowledgeBaseIds
                         );
-                        fingerprintCacheService.storeFindings(codeContent, language, provider, enableRag, blockStartLine, fresh);
+                        if (canUseCache) {
+                            fingerprintCacheService.storeFindings(codeContent, language, provider, enableRag, blockStartLine, fresh);
+                        }
                         return fresh;
                     });
         }

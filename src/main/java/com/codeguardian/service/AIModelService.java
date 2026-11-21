@@ -65,6 +65,14 @@ public class AIModelService {
      * @return 审查发现的问题列表
      */
     public List<Finding> reviewCode(String codeContent, String language, String modelProvider, boolean enableRag, List<Finding> existingFindings) {
+        return reviewCode(codeContent, language, modelProvider, enableRag, existingFindings, null);
+    }
+
+    /**
+     * 审查代码（可指定知识库范围）
+     */
+    public List<Finding> reviewCode(String codeContent, String language, String modelProvider, boolean enableRag,
+                                    List<Finding> existingFindings, List<Long> knowledgeBaseIds) {
         if (Boolean.FALSE.equals(aiConfigProperties.getEnabled())) {
             log.warn("LLM调用已禁用（ai.enabled=false），无法执行AI审查");
             throw new IllegalStateException("AI审查已禁用（ai.enabled=false）");
@@ -85,7 +93,7 @@ public class AIModelService {
             // RAG Retrieval (知识库增强)
             String context = null;
             if (enableRag) {
-                context = retrieveContext(codeContent, language);
+                context = retrieveContext(codeContent, language, knowledgeBaseIds);
             }
             
             // 构建Prompt（使用Spring AI的PromptTemplate）
@@ -222,15 +230,22 @@ public class AIModelService {
      * 检索知识库上下文
      */
     private String retrieveContext(String code, String language) {
+        return retrieveContext(code, language, null);
+    }
+
+    /**
+     * 检索知识库上下文（可按知识库过滤）
+     */
+    private String retrieveContext(String code, String language, List<Long> knowledgeBaseIds) {
         try {
             if (knowledgeBaseService == null) return null;
-            
+
             // 构造查询：使用语言和代码片段的前500个字符 (减小查询长度，避免噪音)
-            String query = "Language: " + language + "\nCode Snippet: " + 
+            String query = "Language: " + language + "\nCode Snippet: " +
                     code.substring(0, Math.min(code.length(), 500));
-            
+
             // 使用 searchSnippets 获取切片，而不是完整文档
-            List<String> snippets = knowledgeBaseService.searchSnippets(query, 3);
+            List<String> snippets = knowledgeBaseService.searchSnippets(query, 3, knowledgeBaseIds);
             if (snippets.isEmpty()) return null;
             
             StringBuilder sb = new StringBuilder();

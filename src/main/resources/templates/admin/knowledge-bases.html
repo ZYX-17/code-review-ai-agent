@@ -9,7 +9,6 @@
 </head>
 <body>
     <div class="admin-container">
-        <!-- 左侧导航栏 -->
         <aside class="sidebar">
             <div class="logo"><i class="fas fa-shield-alt"></i></div>
             <ul class="sidebar-menu">
@@ -22,9 +21,7 @@
             </ul>
         </aside>
 
-        <!-- 主内容区域 -->
         <main class="main-content">
-            <!-- 顶部栏 -->
             <header class="top-header">
                 <h1 class="page-title">知识库管理</h1>
                 <div class="user-section">
@@ -33,16 +30,13 @@
                         <span class="username" th:text="${username ?: 'ADMIN'}">ADMIN</span>
                     </div>
                     <div class="user-avatar" id="user-avatar" th:text="${avatarChar ?: '系'}">系</div>
-                    <!-- 简单的登出按钮 -->
                     <a href="/logout" class="logout-btn" style="margin-left: 10px; text-decoration: none; color: #666;">
                         <i class="fas fa-sign-out-alt"></i>
                     </a>
                 </div>
             </header>
 
-            <!-- 内容区域容器 -->
             <div class="content-wrapper">
-                <!-- 二级菜单面板 -->
                 <aside class="submenu-panel">
                     <nav class="submenu-nav">
                         <a href="/admin/knowledge" class="submenu-item">
@@ -61,6 +55,9 @@
                         <div class="content-window">
                             <div class="page-header">
                                 <h2 class="content-title">知识库列表</h2>
+                                <button class="add-user-btn" onclick="showKbModal()">
+                                    <span>+</span> 新增知识库
+                                </button>
                             </div>
 
                             <div class="table-container">
@@ -72,21 +69,34 @@
                                             <th>文档数量</th>
                                             <th>创建时间</th>
                                             <th>状态</th>
+                                            <th>操作</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr>
+                                        <tr th:each="kb : ${bases}">
                                             <td>
-                                                <i class="fas fa-server" style="color: #3498db; margin-right: 5px;"></i>
+                                                <i class="fas fa-database" style="color: #3498db; margin-right: 5px;"></i>
                                                 <span th:text="${kb.name}">默认知识库</span>
                                             </td>
-                                            <td th:text="${kb.description}">系统默认的向量知识库</td>
+                                            <td th:text="${kb.description != null ? kb.description : '-'}">描述</td>
                                             <td>
                                                 <span class="status-tag active" th:text="${kb.documentCount} + ' 篇文档'">0</span>
                                             </td>
-                                            <td th:text="${#temporals.format(kb.createTime, 'yyyy-MM-dd HH:mm')}">2023-01-01</td>
+                                            <td th:text="${kb.createdAt != null ? #temporals.format(kb.createdAt, 'yyyy-MM-dd HH:mm') : '-'}">2023-01-01</td>
                                             <td>
-                                                <span class="status-tag active">启用</span>
+                                                <span class="status-tag active" th:if="${kb.enabled}">启用</span>
+                                                <span class="status-tag inactive" th:unless="${kb.enabled}">停用</span>
+                                            </td>
+                                            <td>
+                                                <div class="action-buttons">
+                                                    <button class="action-btn edit-btn" th:onclick="'editKb(' + ${kb.id} + ')'">编辑</button>
+                                                    <button class="action-btn delete-btn" th:onclick="'deleteKb(' + ${kb.id} + ')'">删除</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr th:if="${#lists.isEmpty(bases)}">
+                                            <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary-color);">
+                                                暂无知识库，请点击右上角新增
                                             </td>
                                         </tr>
                                     </tbody>
@@ -98,6 +108,110 @@
             </div>
         </main>
     </div>
+
+    <div id="kbModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="kbModalTitle">新增知识库</h2>
+                <button class="modal-close" onclick="closeKbModal()">×</button>
+            </div>
+            <form id="kbForm" onsubmit="saveKb(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="kbId">
+                    <div class="form-group">
+                        <label>知识库名称</label>
+                        <input type="text" id="kbName" required maxlength="128">
+                    </div>
+                    <div class="form-group">
+                        <label>描述</label>
+                        <input type="text" id="kbDescription" maxlength="500">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="kbEnabled" checked> 启用
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeKbModal()">取消</button>
+                    <button type="submit" class="btn-submit">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script th:src="@{/js/http.js}"></script>
     <script th:src="@{/js/password.js}"></script>
+    <script th:inline="javascript">
+        const kbCache = /*[[${bases}]]*/ [];
+
+        function showKbModal(kb) {
+            document.getElementById('kbModalTitle').textContent = kb ? '编辑知识库' : '新增知识库';
+            document.getElementById('kbId').value = kb ? kb.id : '';
+            document.getElementById('kbName').value = kb ? kb.name : '';
+            document.getElementById('kbDescription').value = kb ? (kb.description || '') : '';
+            document.getElementById('kbEnabled').checked = kb ? !!kb.enabled : true;
+            document.getElementById('kbModal').style.display = 'flex';
+        }
+
+        function editKb(id) {
+            const kb = kbCache.find(item => item.id === id);
+            if (kb) {
+                showKbModal(kb);
+            }
+        }
+
+        function closeKbModal() {
+            document.getElementById('kbModal').style.display = 'none';
+        }
+
+        async function saveKb(event) {
+            event.preventDefault();
+            const id = document.getElementById('kbId').value;
+            const payload = {
+                name: document.getElementById('kbName').value.trim(),
+                description: document.getElementById('kbDescription').value.trim(),
+                enabled: document.getElementById('kbEnabled').checked
+            };
+
+            try {
+                const response = await fetch(id ? `/admin/knowledge/bases/api/${id}` : '/admin/knowledge/bases/api', {
+                    method: id ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    location.reload();
+                    return;
+                }
+
+                const error = await response.json().catch(() => ({}));
+                alert(error.message || error.error || '保存知识库失败');
+            } catch (error) {
+                console.error('保存知识库失败:', error);
+                alert('保存知识库失败，请稍后重试');
+            }
+        }
+
+        async function deleteKb(id) {
+            if (!confirm('确认删除该知识库？知识库下有文档时无法删除。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/knowledge/bases/api/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    location.reload();
+                    return;
+                }
+                const error = await response.json().catch(() => ({}));
+                alert(error.message || error.error || '删除知识库失败');
+            } catch (error) {
+                console.error('删除知识库失败:', error);
+                alert('删除知识库失败，请稍后重试');
+            }
+        }
+    </script>
 </body>
 </html>
