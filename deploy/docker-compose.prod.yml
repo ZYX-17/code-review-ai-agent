@@ -74,6 +74,10 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-code-review}
       QWEN_API_KEY: ${QWEN_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      RAG_EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-}
+      RAG_EMBEDDING_BASE_URL: ${RAG_EMBEDDING_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-v3}
+      RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-1024}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       GITCODE_TOKEN: ${GITCODE_TOKEN:-}
       API_TOKEN: ${API_TOKEN:-}

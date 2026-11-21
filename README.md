@@ -192,6 +192,16 @@ psql -U postgres -d code_guardian -f database/20260529/init_data_20260529.sql
 
 也可以直接用仓库根目录的 `docker-compose.yml` 启动 PostgreSQL、Redis 和 MinIO。
 
+## 启用向量检索（RAG）
+
+默认使用 BM25 关键词检索。配置阿里云 DashScope embedding Key 后会自动启用 Qwen embedding + pgvector：
+
+1. 在 `config/application-local.yml` 的 `app.rag.embedding.api-key` 填入 DashScope API Key（与对话模型的 Key 独立）
+2. 默认 embedding 模型为 `text-embedding-v3`，维度 1024
+3. `app.rag.vectorize-on-startup: true` 时，启动会为已有文档生成向量
+4. 更换 embedding 模型或维度后，`vector_store` 表会重建（旧向量被清空），需要重新向量化
+5. 生产环境通过 `RAG_EMBEDDING_API_KEY`、`RAG_EMBEDDING_BASE_URL`、`RAG_EMBEDDING_MODEL`、`RAG_EMBEDDING_DIMENSIONS` 环境变量配置
+
 ## 项目结构
 
 ```

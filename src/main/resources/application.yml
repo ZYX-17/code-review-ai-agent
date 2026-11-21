@@ -112,7 +112,7 @@ spring:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 384 # Transformers default (all-MiniLM-L6-v2)
+        dimensions: ${RAG_EMBEDDING_DIMENSIONS:1024} # Qwen text-embedding-v3 默认维度
         initialize-schema: true
 
     # Qwen配置（使用OpenAI兼容接口）
@@ -126,6 +126,12 @@ spring:
 app:
   rag:
     vectorize-on-startup: false
+    embedding:
+      # 独立的 embedding Key；与 Qwen 对话模型的 spring.ai.qwen.api-key 互不影响
+      api-key: ${RAG_EMBEDDING_API_KEY:}
+      base-url: ${RAG_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      model: ${RAG_EMBEDDING_MODEL:text-embedding-v3}
+      dimensions: ${RAG_EMBEDDING_DIMENSIONS:1024}
   # 外部集成（CI/CD、Webhook）共享令牌，生产环境通过 API_TOKEN 环境变量注入。
   # 未配置时 /api/v1/cicd/** 与 /api/v1/webhook/** 会拒绝所有请求。
   integration:

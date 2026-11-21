@@ -32,6 +32,7 @@ spring:
       api-key: ""
       base-url: https://api.openai.com
     qwen:
+      # Qwen 对话模型（可选，与向量检索的 embedding Key 分开）
       api-key: ""
       base-url: https://dashscope.aliyuncs.com/compatible-mode
     ollama:
@@ -53,5 +54,14 @@ logging:
 # 外部集成（CI/CD、Webhook）共享令牌；不需要外部集成时留空。
 # CI/CD 请求头 X-API-Token，GitLab/GitCode Webhook Secret 使用同一个值。
 app:
+  rag:
+    # 配置 embedding Key 后，启动时为已有文档生成向量
+    vectorize-on-startup: true
+    embedding:
+      # 留空时复用 spring.ai.qwen.api-key；也可以单独填 embedding Key
+      api-key: ""
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      model: text-embedding-v3
+      dimensions: 1024
   integration:
     api-token: ""

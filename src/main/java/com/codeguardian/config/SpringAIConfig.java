@@ -1,8 +1,12 @@
 package com.codeguardian.config;
 
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.document.MetadataMode;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
@@ -47,6 +51,18 @@ public class SpringAIConfig {
     
     @Value("${spring.ai.qwen.chat.options.model:${app.rag.qwen.chat.options.model:qwen3-max}}")
     private String qwenModel;
+
+    @Value("${app.rag.embedding.api-key:}")
+    private String ragEmbeddingApiKey;
+
+    @Value("${app.rag.embedding.base-url:https://dashscope.aliyuncs.com/compatible-mode}")
+    private String ragEmbeddingBaseUrl;
+
+    @Value("${app.rag.embedding.model:text-embedding-v3}")
+    private String ragEmbeddingModel;
+
+    @Value("${app.rag.embedding.dimensions:1024}")
+    private int ragEmbeddingDimensions;
     
     @Value("${spring.ai.openai.api-key:}")
     private String openAiApiKey;
@@ -104,9 +120,35 @@ public class SpringAIConfig {
                 .withTemperature(0.3)
                 .build();
         
-        log.info("Qwen ChatModel配置完成: baseUrl={}, model={}, 最终API端点: {}/v1/chat/completions", 
+        log.info("Qwen ChatModel配置完成: baseUrl={}, model={}, 最终API端点: {}/v1/chat/completions",
                 qwenBaseUrl, qwenModel, qwenBaseUrl);
         return new OpenAiChatModel(qwenApi, options);
+    }
+
+    /**
+     * Qwen EmbeddingModel（DashScope OpenAI 兼容接口）
+     *
+     * <p>只有配置了 Qwen API Key 时才会创建，用于启用 pgvector 向量检索。</p>
+     */
+    @Bean(name = "qwenEmbeddingModel")
+    @ConditionalOnExpression("!('${app.rag.embedding.api-key:}').isEmpty() || " +
+            "!('${spring.ai.qwen.api-key:${app.rag.qwen.api-key:}}').isEmpty()")
+    public EmbeddingModel qwenEmbeddingModel() {
+        String apiKey = StringUtils.hasText(ragEmbeddingApiKey) ? ragEmbeddingApiKey : qwenApiKey;
+        if (!StringUtils.hasText(ragEmbeddingApiKey)) {
+            log.info("未配置 app.rag.embedding.api-key，复用 spring.ai.qwen.api-key 作为 embedding Key");
+        }
+
+        log.info("初始化Qwen EmbeddingModel: baseUrl={}, model={}, dimensions={}",
+                ragEmbeddingBaseUrl, ragEmbeddingModel, ragEmbeddingDimensions);
+
+        OpenAiApi qwenApi = new OpenAiApi(ragEmbeddingBaseUrl, apiKey);
+        OpenAiEmbeddingOptions options = OpenAiEmbeddingOptions.builder()
+                .withModel(ragEmbeddingModel)
+                .withDimensions(ragEmbeddingDimensions)
+                .build();
+
+        return new OpenAiEmbeddingModel(qwenApi, MetadataMode.EMBED, options);
     }
     
     /**

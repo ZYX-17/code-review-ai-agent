@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(classes = CodeReviewApplication.class)
+@SpringBootTest(classes = CodeReviewApplication.class, properties = "app.rag.vectorize-on-startup=false")
 @Transactional
 public class AuthServiceTest {
 

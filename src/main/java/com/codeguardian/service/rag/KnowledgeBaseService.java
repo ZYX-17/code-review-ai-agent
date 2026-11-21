@@ -56,6 +56,9 @@ public class KnowledgeBaseService {
     @org.springframework.beans.factory.annotation.Value("${app.rag.vectorize-on-startup:false}")
     private boolean vectorizeOnStartup;
 
+    @org.springframework.beans.factory.annotation.Value("${app.rag.embedding.dimensions:1024}")
+    private int embeddingDimensions;
+
     private Long defaultKbId = 1L;
     
     // 原始文档列表 (用于 BM25 构建)
@@ -114,21 +117,42 @@ public class KnowledgeBaseService {
             
             // 2. 构建 BM25 索引
             buildIndices();
-            
+            log.info("KnowledgeBaseService initialized: vectorizeOnStartup={}, documents={}",
+                    vectorizeOnStartup, documents.size());
+
         } catch (Exception e) {
             log.warn("KnowledgeBaseService initialization failed: {}", e.getMessage());
         }
-        if (vectorizeOnStartup) {
-            new Thread(() -> {
-                try {
-                    for (KnowledgeDocument doc : this.documents) {
-                        vectorizeDocument(doc);
-                    }
-                } catch (Exception ex) {
-                    log.warn("Background vectorization failed: {}", ex.getMessage());
-                }
-            }, "rag-vectorize-background").start();
+    }
+
+    /**
+     * 应用启动完成后再执行向量化，避免与 vectorStore Bean 创建产生异步竞争
+     */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void vectorizeExistingDocumentsOnStartup() {
+        log.info("ApplicationReadyEvent: vectorizeOnStartup={}, documents={}, vectorStorePresent={}",
+                vectorizeOnStartup, documents.size(), vectorStore != null);
+
+        if (!vectorizeOnStartup || documents.isEmpty()) {
+            return;
         }
+        if (vectorStore == null) {
+            log.info("未启用向量存储，跳过启动时向量化");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                log.info("Starting background vectorization for {} documents", documents.size());
+                for (KnowledgeDocument doc : documents) {
+                    log.info("Vectorizing document: {} ({})", doc.getTitle(), doc.getId());
+                    vectorizeDocument(doc);
+                }
+                log.info("Background vectorization finished");
+            } catch (Exception ex) {
+                log.warn("Background vectorization failed: {}", ex.getMessage(), ex);
+            }
+        }, "rag-vectorize-background").start();
     }
 
     private void checkAndFixVectorSchema() {
@@ -145,20 +169,20 @@ public class KnowledgeBaseService {
                 
                 log.info("Current vector_store.embedding type: {}", type);
                 
-                // If type exists and is NOT vector(384), fix it
-                if (type != null && !type.contains("(384)")) {
-                    log.warn("Detected incorrect vector dimensions (expected 384). Fixing schema...");
-                    
+                // If type exists and is NOT vector(<configured dimensions>), fix it
+                if (type != null && !type.contains("(" + embeddingDimensions + ")")) {
+                    log.warn("Detected incorrect vector dimensions (expected {}). Fixing schema...", embeddingDimensions);
+
                     // Option 1: Drop table (Cleanest, but requires restart or re-init logic which is hard)
                     // Option 2: Alter table (Preserves table, but clears data)
-                    
+
                     log.info("Truncating vector_store table...");
                     jdbcTemplate.execute("TRUNCATE TABLE vector_store");
-                    
-                    log.info("Altering embedding column to vector(384)...");
+
+                    log.info("Altering embedding column to vector({})...", embeddingDimensions);
                     // Using USING clause to cast (though truncation makes it empty)
-                    jdbcTemplate.execute("ALTER TABLE vector_store ALTER COLUMN embedding TYPE vector(384)");
-                    
+                    jdbcTemplate.execute("ALTER TABLE vector_store ALTER COLUMN embedding TYPE vector(" + embeddingDimensions + ")");
+
                     log.info("Schema fixed successfully. Please re-upload documents if needed.");
                 }
             }
@@ -238,6 +262,12 @@ public class KnowledgeBaseService {
             chunk.getMetadata().put("kb_id", doc.getKbId());
         }
         try {
+            // 幂等：重复向量化前先清理该文档的旧向量
+            try {
+                jdbcTemplate.update("DELETE FROM vector_store WHERE metadata->>'source_doc_id' = ?", doc.getId());
+            } catch (Exception e) {
+                log.debug("清理旧向量失败: {}", e.getMessage());
+            }
             vectorStore.add(chunks);
         } catch (Exception e) {
             log.error("Failed to add document to Vector Store: {}", e.getMessage(), e);
