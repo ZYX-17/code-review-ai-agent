@@ -226,7 +226,8 @@ public class SpringAIConfig {
     }
 
     /**
-     * 只有 Ollama 真正可达时才注册 DeepSeek 本地模型，避免下拉框出现不可用选项
+     * 只有 Ollama 真正可达且已拉取配置的模型时才注册 DeepSeek 本地模型，
+     * 避免默认选中一个不存在的模型导致 AI 审查失败
      */
     private boolean isOllamaReachable(String baseUrl) {
         try {
@@ -238,13 +239,21 @@ public class SpringAIConfig {
                     .timeout(java.time.Duration.ofSeconds(1))
                     .GET()
                     .build();
-            java.net.http.HttpResponse<Void> response = client.send(
-                    request, java.net.http.HttpResponse.BodyHandlers.discarding());
-            boolean reachable = response.statusCode() >= 200 && response.statusCode() < 500;
-            if (!reachable) {
+            java.net.http.HttpResponse<String> response = client.send(
+                    request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.warn("Ollama 不可用（HTTP {}），不注册 DeepSeek 本地模型", response.statusCode());
+                return false;
             }
-            return reachable;
+
+            String model = environment.getProperty("spring.ai.ollama.chat.options.model",
+                    "deepseek-r1:8b");
+            String body = response.body();
+            if (body == null || !body.contains("\"" + model + "\"")) {
+                log.warn("Ollama 可达但未找到模型 {}，不注册 DeepSeek 本地模型", model);
+                return false;
+            }
+            return true;
         } catch (Exception e) {
             log.warn("Ollama 未启动或不可达，不注册 DeepSeek 本地模型: {}", e.getMessage());
             return false;

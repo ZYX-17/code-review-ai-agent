@@ -20,3 +20,7 @@ database/code_guardian_full_dump.sql
 
 # 本地 Semgrep 输出
 output_*.json
+
+# Python
+__pycache__/
+*.pyc

@@ -168,9 +168,11 @@ public class RoleService {
     public void assignPermissions(Long roleId, List<String> permissionCodes) {
         // 删除现有权限
         rolePermissionRepository.deleteByRoleId(roleId);
-        
-        // 添加新权限
-        for (String permissionCode : permissionCodes) {
+        // 立即执行 DELETE，避免同一事务内重新插入相同 (role_id, permission_id) 触发唯一约束
+        rolePermissionRepository.flush();
+
+        // 添加新权限（去重，避免传入重复代码导致唯一约束冲突）
+        for (String permissionCode : new java.util.LinkedHashSet<>(permissionCodes)) {
             Permission permission = permissionRepository.findByCode(permissionCode)
                 .orElseThrow(() -> new RuntimeException("权限不存在: " + permissionCode));
             
