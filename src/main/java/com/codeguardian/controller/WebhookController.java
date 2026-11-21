@@ -4,6 +4,7 @@ import com.codeguardian.dto.ReviewRequestDTO;
 import com.codeguardian.dto.ReviewResponseDTO;
 import com.codeguardian.service.ReviewService;
 import com.codeguardian.service.integration.GitFeedbackService;
+import com.codeguardian.service.integration.GitHubFeedbackService;
 import com.codeguardian.service.integration.QualityGateService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,9 +39,13 @@ public class WebhookController {
     private final GitFeedbackService gitFeedbackService;
     private final QualityGateService qualityGateService;
     private final ObjectMapper objectMapper;
+    private final GitHubFeedbackService githubFeedbackService;
 
     @Value("${app.integration.api-token:}")
     private String webhookSecret;
+
+    @Value("${app.public-base-url:}")
+    private String publicBaseUrl;
 
     /**
      * 处理 GitCode (GitLab compatible) Webhook
@@ -116,22 +121,30 @@ public class WebhookController {
                 String commit = pr.path("head").path("sha").asText(null);
                 int number = pr.path("number").asInt();
                 String title = pr.path("title").asText("");
+                String repoFullName = payload.path("repository").path("full_name").asText(null);
 
-                log.info("收到 GitHub PR 事件: #{} {} (branch={}, commit={})", number, title, branch, commit);
+                if (!StringUtils.hasText(repoFullName) || number <= 0
+                        || !StringUtils.hasText(gitUrl) || !StringUtils.hasText(commit)) {
+                    return ResponseEntity.badRequest().body("无效的 GitHub PR 事件");
+                }
+
+                log.info("收到 GitHub PR 事件: {} #{} {} (branch={}, commit={})",
+                        repoFullName, number, title, branch, commit);
                 CompletableFuture.runAsync(() ->
-                        triggerReview(gitUrl, branch, commit, "PR-" + number + "-" + title));
+                        processGitHubPullRequest(repoFullName, number, gitUrl, branch, commit, title));
 
             } else if ("push".equals(eventType)) {
                 String gitUrl = payload.path("repository").path("clone_url").asText(null);
+                String repoFullName = payload.path("repository").path("full_name").asText(null);
                 String commit = payload.path("after").asText(null);
                 String ref = payload.path("ref").asText("");
                 String branch = ref.startsWith("refs/heads/") ? ref.substring("refs/heads/".length()) : null;
 
-                if (commit != null && !commit.matches("0+")) {
+                if (StringUtils.hasText(repoFullName) && StringUtils.hasText(commit) && !commit.matches("0+")) {
                     String shortCommit = commit.substring(0, Math.min(7, commit.length()));
-                    log.info("收到 GitHub Push 事件: branch={}, commit={}", branch, shortCommit);
+                    log.info("收到 GitHub Push 事件: {} branch={}, commit={}", repoFullName, branch, shortCommit);
                     CompletableFuture.runAsync(() ->
-                            triggerReview(gitUrl, branch, commit, "PUSH-" + shortCommit));
+                            processGitHubPush(repoFullName, gitUrl, branch, commit, shortCommit));
                 }
             } else {
                 return ResponseEntity.ok("忽略的事件类型: " + eventType);
@@ -223,31 +236,131 @@ public class WebhookController {
         }
     }
 
+    private void processGitHubPullRequest(String repoFullName, int prNumber, String gitUrl,
+                                          String branch, String commit, String title) {
+        try {
+            if (githubFeedbackService.isConfigured()) {
+                githubFeedbackService.updateCommitStatus(repoFullName, commit, "pending",
+                        "CodeGuardian AI 审查中...", null);
+            }
+
+            ReviewResponseDTO response = triggerReview(gitUrl, branch, commit,
+                    "PR-" + prNumber + "-" + title);
+
+            if (githubFeedbackService.isConfigured()) {
+                githubFeedbackService.postPullRequestComment(repoFullName, prNumber,
+                        "🤖 **CodeGuardian AI** 已开始审查此 PR。\n\n任务 ID: `" + response.getTaskId() + "`");
+            }
+
+            ReviewResponseDTO finalTask = awaitTaskCompletion(response.getTaskId());
+            if (finalTask == null) {
+                githubFeedbackService.updateCommitStatus(repoFullName, commit, "error",
+                        "CodeGuardian AI 审查超时", buildReportUrl(response.getTaskId()));
+                return;
+            }
+            reportGitHubResult(repoFullName, prNumber, commit, finalTask);
+        } catch (Exception e) {
+            log.error("处理 GitHub PR 失败: {}#{}", repoFullName, prNumber, e);
+            githubFeedbackService.updateCommitStatus(repoFullName, commit, "error",
+                    "CodeGuardian AI 处理失败: " + e.getMessage(), null);
+        }
+    }
+
+    private void processGitHubPush(String repoFullName, String gitUrl, String branch,
+                                   String commit, String shortCommit) {
+        try {
+            if (githubFeedbackService.isConfigured()) {
+                githubFeedbackService.updateCommitStatus(repoFullName, commit, "pending",
+                        "CodeGuardian AI 审查中...", null);
+            }
+
+            ReviewResponseDTO response = triggerReview(gitUrl, branch, commit, "PUSH-" + shortCommit);
+            ReviewResponseDTO finalTask = awaitTaskCompletion(response.getTaskId());
+            if (finalTask == null) {
+                githubFeedbackService.updateCommitStatus(repoFullName, commit, "error",
+                        "CodeGuardian AI 审查超时", buildReportUrl(response.getTaskId()));
+                return;
+            }
+            reportGitHubResult(repoFullName, null, commit, finalTask);
+        } catch (Exception e) {
+            log.error("处理 GitHub Push 失败: {}@{}", repoFullName, shortCommit, e);
+            githubFeedbackService.updateCommitStatus(repoFullName, commit, "error",
+                    "CodeGuardian AI 处理失败: " + e.getMessage(), null);
+        }
+    }
+
+    private void reportGitHubResult(String repoFullName, Integer prNumber,
+                                    String commit, ReviewResponseDTO finalTask) {
+        boolean failed = "FAILED".equals(finalTask.getStatus());
+        boolean passed = !failed && qualityGateService.checkQualityGate(finalTask.getTaskId(), "CRITICAL");
+
+        String summary = String.format("严重 %d / 高危 %d / 中危 %d / 低危 %d",
+                finalTask.getCriticalCount(), finalTask.getHighCount(),
+                finalTask.getMediumCount(), finalTask.getLowCount());
+
+        String state = failed ? "failure" : (passed ? "success" : "failure");
+        String description = failed
+                ? "审查失败: " + (finalTask.getErrorMessage() != null ? finalTask.getErrorMessage() : "未知错误")
+                : "审查完成，问题：" + summary;
+        String targetUrl = buildReportUrl(finalTask.getTaskId());
+
+        if (commit != null) {
+            githubFeedbackService.updateCommitStatus(repoFullName, commit, state, description, targetUrl);
+        }
+
+        if (prNumber != null && prNumber > 0) {
+            String body;
+            if (failed) {
+                body = "❌ **CodeGuardian AI** 审查失败。\n\n"
+                        + "- 任务 ID: `" + finalTask.getTaskId() + "`\n"
+                        + "- 原因: " + finalTask.getErrorMessage();
+            } else {
+                body = "🤖 **CodeGuardian AI** 审查完成。\n\n"
+                        + "- 任务 ID: `" + finalTask.getTaskId() + "`\n"
+                        + "- 问题统计: " + summary + "\n"
+                        + "- 门禁（CRITICAL）: " + (passed ? "通过" : "未通过");
+                if (targetUrl != null) {
+                    body += "\n- 报告: " + targetUrl;
+                }
+            }
+            githubFeedbackService.postPullRequestComment(repoFullName, prNumber, body);
+        }
+    }
+
+    private ReviewResponseDTO awaitTaskCompletion(Long taskId) {
+        for (int i = 0; i < 120; i++) {
+            try {
+                ReviewResponseDTO task = reviewService.getReviewTask(taskId);
+                String status = task.getStatus();
+                if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
+                    return task;
+                }
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("等待审查任务 {} 被中断", taskId);
+                return null;
+            } catch (Exception e) {
+                log.warn("轮询审查任务 {} 失败: {}", taskId, e.getMessage());
+                return null;
+            }
+        }
+        log.warn("等待审查任务 {} 超时", taskId);
+        return null;
+    }
+
+    private String buildReportUrl(Long taskId) {
+        if (!StringUtils.hasText(publicBaseUrl)) {
+            return null;
+        }
+        return publicBaseUrl.replaceAll("/+$", "") + "/report/" + taskId;
+    }
+
     /**
      * 轮询任务状态，完成后回写评论与提交状态
      */
     private void awaitAndReportResult(String gitUrl, String commitSha, Integer mrIid, Long taskId) {
-        ReviewResponseDTO finalTask = null;
-
-        try {
-            // 最多等待 10 分钟（120 * 5s）
-            for (int i = 0; i < 120; i++) {
-                finalTask = reviewService.getReviewTask(taskId);
-                String status = finalTask.getStatus();
-                if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
-                    break;
-                }
-                Thread.sleep(5000);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("等待审查任务 {} 被中断", taskId);
-            return;
-        } catch (Exception e) {
-            log.error("轮询审查任务 {} 失败", taskId, e);
-            return;
-        }
-
+        ReviewResponseDTO finalTask = awaitTaskCompletion(taskId);
         if (finalTask == null) {
             return;
         }

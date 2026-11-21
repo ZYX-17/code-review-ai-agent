@@ -81,6 +81,9 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       GITCODE_TOKEN: ${GITCODE_TOKEN:-}
       API_TOKEN: ${API_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx2g}
       DJL_CACHE_DIR: /tmp/djl-cache
     extra_hosts:

@@ -47,6 +47,12 @@ gitcode:
   api:
     token: ""
 
+github:
+  api:
+    # 填入 GitHub PAT 后启用 PR 评论与 commit status
+    token: ""
+    base-url: https://api.github.com
+
 logging:
   level:
     com.codeguardian: DEBUG

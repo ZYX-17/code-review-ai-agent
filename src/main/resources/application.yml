@@ -136,6 +136,8 @@ app:
   # 未配置时 /api/v1/cicd/** 与 /api/v1/webhook/** 会拒绝所有请求。
   integration:
     api-token: ${API_TOKEN:}
+  # 报告等页面的公开访问地址，用于 GitHub commit status 的 target_url
+  public-base-url: ${PUBLIC_BASE_URL:}
 
 # Sa-Token配置
 sa-token:
@@ -167,6 +169,11 @@ server:
 gitcode:
   api:
     base-url: https://api.gitcode.com/api/v5
+
+github:
+  api:
+    token: ${GITHUB_TOKEN:}
+    base-url: ${GITHUB_API_URL:https://api.github.com}
 
 djl:
   cache:

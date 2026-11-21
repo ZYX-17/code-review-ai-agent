@@ -202,6 +202,20 @@ psql -U postgres -d code_guardian -f database/20260529/init_data_20260529.sql
 4. 更换 embedding 模型或维度后，`vector_store` 表会重建（旧向量被清空），需要重新向量化
 5. 生产环境通过 `RAG_EMBEDDING_API_KEY`、`RAG_EMBEDDING_BASE_URL`、`RAG_EMBEDDING_MODEL`、`RAG_EMBEDDING_DIMENSIONS` 环境变量配置
 
+## GitHub Webhook 与评论回写
+
+1. 创建 GitHub PAT：
+   - Classic：勾选 `repo`
+   - Fine-grained：`Pull requests: Read and write`、`Commit statuses: Read and write`、`Contents: Read`
+2. 本地填入 `config/application-local.yml` 的 `github.api.token`；生产环境设置 `GITHUB_TOKEN`
+3. GitHub 仓库 Settings → Webhooks 添加：
+   - Payload URL：`https://你的域名/api/v1/webhook/github`
+   - Content type：`application/json`
+   - Secret：与 `API_TOKEN` 相同
+   - 事件：`Pull requests`、`Pushes`
+4. 审查完成后会自动在 PR 下评论，并更新 commit status（context 为 `codeguardian-ai`）
+5. 如需 commit status 跳转到报告页，设置 `PUBLIC_BASE_URL`（如 `https://your-domain.com`）
+
 ## 项目结构
 
 ```
