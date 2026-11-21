@@ -60,6 +60,16 @@ public class ReviewRequestDTO {
      * Git密码/令牌（可选，仅会话态）
      */
     private String gitPassword;
+
+    /**
+     * Git 分支（GIT 类型可选）
+     */
+    private String gitBranch;
+
+    /**
+     * Git 提交哈希（GIT 类型可选）
+     */
+    private String gitCommit;
     
     /**
      * 任务名称（可选，默认自动生成）

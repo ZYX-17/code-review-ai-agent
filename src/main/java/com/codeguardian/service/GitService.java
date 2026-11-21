@@ -31,15 +31,25 @@ public class GitService {
      * @return 本地临时目录路径
      */
     public String cloneRepository(String gitUrl, String username, String password) {
+        return cloneRepository(gitUrl, username, password, null, null);
+    }
+
+    /**
+     * 克隆 Git 仓库到临时目录，可选指定分支和提交
+     */
+    public String cloneRepository(String gitUrl, String username, String password,
+                                  String branch, String commitHash) {
+        validateGitRef(branch, commitHash);
+        String cacheKey = buildCacheKey(gitUrl, branch, commitHash);
         try {
             // 检查是否已经克隆过
-            if (clonedRepos.containsKey(gitUrl)) {
-                String existingPath = clonedRepos.get(gitUrl);
+            if (clonedRepos.containsKey(cacheKey)) {
+                String existingPath = clonedRepos.get(cacheKey);
                 if (Files.exists(Paths.get(existingPath))) {
                     log.info("使用已存在的克隆: {}", existingPath);
                     return existingPath;
                 } else {
-                    clonedRepos.remove(gitUrl);
+                    clonedRepos.remove(cacheKey);
                 }
             }
             
@@ -119,8 +129,19 @@ public class GitService {
             }
             String repoPath = tempDirPath + File.separator + repoName;
             
-            // 执行git clone命令（git clone会在tempDir下创建repoName目录）
-            ProcessBuilder processBuilder = new ProcessBuilder("git", "clone", cloneUrl, repoPath);
+            // 执行git clone命令（可选指定分支）
+            List<String> cloneCommand = new ArrayList<>();
+            cloneCommand.add("git");
+            cloneCommand.add("clone");
+            if (branch != null && !branch.isBlank()) {
+                cloneCommand.add("--branch");
+                cloneCommand.add(branch);
+                cloneCommand.add("--single-branch");
+            }
+            cloneCommand.add(cloneUrl);
+            cloneCommand.add(repoPath);
+
+            ProcessBuilder processBuilder = new ProcessBuilder(cloneCommand);
             processBuilder.redirectErrorStream(true);
             
             Process process = processBuilder.start();
@@ -147,17 +168,19 @@ public class GitService {
             // 检查克隆后的目录是否存在
             File repoDir = new File(repoPath);
             if (repoDir.exists() && repoDir.isDirectory()) {
-                clonedRepos.put(gitUrl, repoPath);
+                checkoutCommit(repoPath, commitHash);
+                clonedRepos.put(cacheKey, repoPath);
                 log.info("Git仓库克隆成功: {} -> {}", gitUrl, repoPath);
                 return repoPath;
             }
-            
+
             // 如果指定路径不存在，尝试查找其他目录
             File[] files = tempDir.toFile().listFiles();
             if (files != null && files.length > 0) {
                 File foundDir = files[0];
                 if (foundDir.isDirectory()) {
-                    clonedRepos.put(gitUrl, foundDir.getAbsolutePath());
+                    checkoutCommit(foundDir.getAbsolutePath(), commitHash);
+                    clonedRepos.put(cacheKey, foundDir.getAbsolutePath());
                     log.info("Git仓库克隆成功: {} -> {}", gitUrl, foundDir.getAbsolutePath());
                     return foundDir.getAbsolutePath();
                 }
@@ -171,6 +194,63 @@ public class GitService {
         }
     }
     
+    private String buildCacheKey(String gitUrl, String branch, String commitHash) {
+        return gitUrl + "#" + (branch != null ? branch : "") + "@" + (commitHash != null ? commitHash : "");
+    }
+
+    private void validateGitRef(String branch, String commitHash) {
+        if (branch != null && !branch.isBlank() && !branch.matches("[A-Za-z0-9._/-]+")) {
+            throw new IllegalArgumentException("非法的分支名: " + branch);
+        }
+        if (commitHash != null && !commitHash.isBlank() && !commitHash.matches("[0-9a-fA-F]{7,40}")) {
+            throw new IllegalArgumentException("非法的提交哈希: " + commitHash);
+        }
+    }
+
+    private void checkoutCommit(String repoPath, String commitHash) {
+        if (commitHash == null || commitHash.isBlank()) {
+            return;
+        }
+
+        int exitCode = runGitCommand(repoPath, "checkout", commitHash);
+        if (exitCode != 0) {
+            runGitCommand(repoPath, "fetch", "origin", commitHash);
+            exitCode = runGitCommand(repoPath, "checkout", commitHash);
+            if (exitCode != 0) {
+                throw new RuntimeException("Git checkout 失败: " + commitHash);
+            }
+        }
+    }
+
+    private int runGitCommand(String repoPath, String... args) {
+        try {
+            List<String> command = new ArrayList<>();
+            command.add("git");
+            command.add("-C");
+            command.add(repoPath);
+            command.addAll(Arrays.asList(args));
+
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
+
+            String output;
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                output = reader.lines().collect(java.util.stream.Collectors.joining("\n"));
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                log.warn("git {} 执行失败 ({}): {}", String.join(" ", args), exitCode, output);
+            }
+            return exitCode;
+        } catch (Exception e) {
+            log.warn("执行 git {} 失败: {}", String.join(" ", args), e.getMessage());
+            return -1;
+        }
+    }
+
     /**
      * 获取目录下的所有文件列表（用于构建文件树）
      * @param directoryPath 目录路径

@@ -2,21 +2,31 @@ package com.codeguardian.controller;
 
 import com.codeguardian.dto.ReviewRequestDTO;
 import com.codeguardian.dto.ReviewResponseDTO;
-import com.codeguardian.dto.webhook.GitHubWebhookPayload;
 import com.codeguardian.service.ReviewService;
 import com.codeguardian.service.integration.GitFeedbackService;
 import com.codeguardian.service.integration.QualityGateService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Webhook 控制器
- * 处理 GitHub/GitLab 的 Webhook 事件
+ * 处理 GitHub / GitLab / GitCode 的 Webhook 事件
  */
 @RestController
 @RequestMapping("/api/v1/webhook")
@@ -27,6 +37,10 @@ public class WebhookController {
     private final ReviewService reviewService;
     private final GitFeedbackService gitFeedbackService;
     private final QualityGateService qualityGateService;
+    private final ObjectMapper objectMapper;
+
+    @Value("${app.integration.api-token:}")
+    private String webhookSecret;
 
     /**
      * 处理 GitCode (GitLab compatible) Webhook
@@ -36,7 +50,7 @@ public class WebhookController {
     public ResponseEntity<String> handleGitCodeWebhook(
             @RequestHeader(value = "X-Gitlab-Event", defaultValue = "") String eventType,
             @RequestBody Map<String, Object> payload) {
-        
+
         log.info("收到 GitCode Webhook 事件: {}", eventType);
 
         String objectKind = (String) payload.get("object_kind");
@@ -54,56 +68,158 @@ public class WebhookController {
             return ResponseEntity.ok("忽略的操作: " + action);
         }
 
-        // 异步处理
-        CompletableFuture.runAsync(() -> processGitCodeMr(payload));
-
+        CompletableFuture.runAsync(() -> processGitLabMr(payload));
         return ResponseEntity.ok("Webhook 已接收并开始处理。");
     }
 
-    private void processGitCodeMr(Map<String, Object> payload) {
+    /**
+     * 处理 GitLab 原生 Webhook（payload 与 GitCode 兼容）
+     */
+    @PostMapping("/gitlab")
+    public ResponseEntity<String> handleGitLabWebhook(
+            @RequestHeader(value = "X-Gitlab-Event", defaultValue = "") String eventType,
+            @RequestBody Map<String, Object> payload) {
+        log.info("收到 GitLab Webhook 事件: {}", eventType);
+        return handleGitCodeWebhook(eventType, payload);
+    }
+
+    /**
+     * 处理 GitHub Webhook
+     *
+     * <p>使用 X-Hub-Signature-256 校验，密钥为 API_TOKEN。</p>
+     */
+    @PostMapping("/github")
+    public ResponseEntity<String> handleGitHubWebhook(
+            @RequestHeader(value = "X-GitHub-Event", defaultValue = "") String eventType,
+            @RequestHeader(value = "X-Hub-Signature-256", required = false) String signature,
+            @RequestBody byte[] rawBody) {
+
+        if (!verifyGitHubSignature(rawBody, signature)) {
+            return ResponseEntity.status(401).body("GitHub 签名校验失败");
+        }
+
+        try {
+            JsonNode payload = objectMapper.readTree(rawBody);
+
+            if ("pull_request".equals(eventType)) {
+                String action = payload.path("action").asText();
+                if (!List.of("opened", "synchronize", "reopened").contains(action)) {
+                    return ResponseEntity.ok("忽略的操作: " + action);
+                }
+
+                JsonNode pr = payload.path("pull_request");
+                String headRepoUrl = pr.path("head").path("repo").path("clone_url").asText(null);
+                String gitUrl = StringUtils.hasText(headRepoUrl)
+                        ? headRepoUrl
+                        : payload.path("repository").path("clone_url").asText(null);
+                String branch = pr.path("head").path("ref").asText(null);
+                String commit = pr.path("head").path("sha").asText(null);
+                int number = pr.path("number").asInt();
+                String title = pr.path("title").asText("");
+
+                log.info("收到 GitHub PR 事件: #{} {} (branch={}, commit={})", number, title, branch, commit);
+                CompletableFuture.runAsync(() ->
+                        triggerReview(gitUrl, branch, commit, "PR-" + number + "-" + title));
+
+            } else if ("push".equals(eventType)) {
+                String gitUrl = payload.path("repository").path("clone_url").asText(null);
+                String commit = payload.path("after").asText(null);
+                String ref = payload.path("ref").asText("");
+                String branch = ref.startsWith("refs/heads/") ? ref.substring("refs/heads/".length()) : null;
+
+                if (commit != null && !commit.matches("0+")) {
+                    String shortCommit = commit.substring(0, Math.min(7, commit.length()));
+                    log.info("收到 GitHub Push 事件: branch={}, commit={}", branch, shortCommit);
+                    CompletableFuture.runAsync(() ->
+                            triggerReview(gitUrl, branch, commit, "PUSH-" + shortCommit));
+                }
+            } else {
+                return ResponseEntity.ok("忽略的事件类型: " + eventType);
+            }
+
+            return ResponseEntity.ok("Webhook 已接收并开始处理。");
+        } catch (Exception e) {
+            log.error("处理 GitHub Webhook 失败", e);
+            return ResponseEntity.badRequest().body("无效的请求体: " + e.getMessage());
+        }
+    }
+
+    private void processGitLabMr(Map<String, Object> payload) {
         try {
             Map<String, Object> attributes = (Map<String, Object>) payload.get("object_attributes");
             Map<String, Object> project = (Map<String, Object>) payload.get("project");
-            
+
             if (attributes == null || project == null) return;
 
             String gitUrl = (String) project.get("git_http_url");
             String htmlUrl = (String) project.get("web_url");
             String branch = (String) attributes.get("source_branch");
-            
+
             Map<String, Object> lastCommit = (Map<String, Object>) attributes.get("last_commit");
             String commitSha = lastCommit != null ? (String) lastCommit.get("id") : null;
-            
+
             Integer mrIid = (Integer) attributes.get("iid");
             String mrTitle = (String) attributes.get("title");
 
-            log.info("正在处理 GitCode MR: {}/merge_requests/{} (branch: {}, commit: {})", htmlUrl, mrIid, branch, commitSha);
+            log.info("正在处理 GitLab MR: {}/merge_requests/{} (branch: {}, commit: {})",
+                    htmlUrl, mrIid, branch, commitSha);
 
-            // 1. 设置提交状态为 Pending
             if (commitSha != null) {
                 gitFeedbackService.updateStatus(gitUrl, commitSha, "pending", "CodeGuardian AI 审查中...");
             }
 
-            // 2. 触发审查
-            ReviewRequestDTO request = ReviewRequestDTO.builder()
-                    .reviewType("GIT")
-                    .gitUrl(gitUrl)
-                    .taskName("MR-" + mrIid + "-" + mrTitle)
-                    .build();
+            ReviewResponseDTO response = triggerReview(
+                    gitUrl, branch, commitSha, "MR-" + mrIid + "-" + mrTitle);
 
-            ReviewResponseDTO response = reviewService.createReviewTask(request);
-
-            // 3. 发送初始评论
             gitFeedbackService.postComment(gitUrl, String.valueOf(mrIid),
                     "🤖 **CodeGuardian AI** 已开始审查此 MR。\n\n" +
                     "任务 ID: `" + response.getTaskId() + "`\n" +
                     "请等待后续审查报告。");
 
-            // 4. 等待审查完成并回写最终结果
             awaitAndReportResult(gitUrl, commitSha, mrIid, response.getTaskId());
 
         } catch (Exception e) {
-            log.error("处理 GitCode Webhook 失败", e);
+            log.error("处理 GitLab Webhook 失败", e);
+        }
+    }
+
+    private ReviewResponseDTO triggerReview(String gitUrl, String branch, String commit, String taskName) {
+        ReviewRequestDTO request = ReviewRequestDTO.builder()
+                .reviewType("GIT")
+                .gitUrl(gitUrl)
+                .gitBranch(branch)
+                .gitCommit(commit)
+                .taskName(taskName)
+                .build();
+
+        ReviewResponseDTO response = reviewService.createReviewTask(request);
+        log.info("Webhook 触发审查: taskId={}, branch={}, commit={}",
+                response.getTaskId(), branch, commit);
+        return response;
+    }
+
+    /**
+     * 校验 GitHub X-Hub-Signature-256
+     */
+    private boolean verifyGitHubSignature(byte[] payload, String signature) {
+        if (!StringUtils.hasText(webhookSecret)
+                || !StringUtils.hasText(signature)
+                || !signature.startsWith("sha256=")) {
+            return false;
+        }
+
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            String expected = HexFormat.of().formatHex(mac.doFinal(payload));
+            byte[] expectedBytes = expected.getBytes(StandardCharsets.US_ASCII);
+            byte[] actualBytes = signature.substring("sha256=".length())
+                    .toLowerCase(Locale.ROOT)
+                    .getBytes(StandardCharsets.US_ASCII);
+            return MessageDigest.isEqual(expectedBytes, actualBytes);
+        } catch (Exception e) {
+            log.warn("GitHub 签名校验失败: {}", e.getMessage());
+            return false;
         }
     }
 

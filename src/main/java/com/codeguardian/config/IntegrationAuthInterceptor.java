@@ -39,6 +39,11 @@ public class IntegrationAuthInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws IOException {
+        // GitHub Webhook 使用 X-Hub-Signature-256 HMAC 校验，由控制器处理
+        if (request.getRequestURI().endsWith("/api/v1/webhook/github")) {
+            return true;
+        }
+
         if (!StringUtils.hasText(apiToken)) {
             log.warn("API_TOKEN 未配置，拒绝外部集成请求: {}", request.getRequestURI());
             writeUnauthorized(response, "API_TOKEN 未配置，外部集成接口不可用");

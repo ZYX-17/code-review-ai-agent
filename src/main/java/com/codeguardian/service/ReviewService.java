@@ -174,7 +174,12 @@ public class ReviewService {
             if (request.getProjectPath() == null && request.getGitUrl() != null) {
                 try {
                     log.info("Git项目尚未克隆，开始克隆: {}", request.getGitUrl());
-                    String localPath = gitService.cloneRepository(request.getGitUrl(), request.getGitUsername(), request.getGitPassword());
+                    String localPath = gitService.cloneRepository(
+                            request.getGitUrl(),
+                            request.getGitUsername(),
+                            request.getGitPassword(),
+                            request.getGitBranch(),
+                            request.getGitCommit());
                     request.setProjectPath(localPath);
                     task.setScope(localPath);
                     taskRepository.save(task); // 更新任务范围

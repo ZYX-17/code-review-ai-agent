@@ -39,6 +39,10 @@ public class CicdController {
         ReviewRequestDTO reviewRequest = ReviewRequestDTO.builder()
                 .reviewType("GIT")
                 .gitUrl(request.getGitUrl())
+                .gitBranch(request.getBranch())
+                .gitCommit(request.getCommitHash())
+                .rulesOnly(request.getRulesOnly())
+                .ruleTemplate(request.getRuleTemplate())
                 .taskName("CI-" + (request.getTriggerBy() != null ? request.getTriggerBy() : "AUTO") + "-" + System.currentTimeMillis())
                 .build();
 
@@ -54,8 +58,8 @@ public class CicdController {
         return ResponseEntity.ok(CicdStatusResponse.builder()
                 .taskId(taskResponse.getTaskId())
                 .status(com.codeguardian.enums.TaskStatusEnum.RUNNING.name())
-                .passed(true) // 初始状态默认为通过
-                .message("任务已提交，请轮询状态接口")
+                .passed(null) // 结果未知，CI 工具需轮询 status 接口
+                .message("任务已提交，请轮询状态接口获取门禁结果")
                 .build());
     }
 

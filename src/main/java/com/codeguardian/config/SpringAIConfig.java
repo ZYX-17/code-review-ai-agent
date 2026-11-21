@@ -174,10 +174,38 @@ public class SpringAIConfig {
 
     private boolean isDeepSeekConfigured() {
         String baseUrl = environment.getProperty("spring.ai.ollama.base-url");
-        if (StringUtils.hasText(baseUrl)) {
-            return true;
+        if (!StringUtils.hasText(baseUrl)) {
+            baseUrl = environment.getProperty("app.rag.ollama.base-url");
         }
-        String appBaseUrl = environment.getProperty("app.rag.ollama.base-url");
-        return StringUtils.hasText(appBaseUrl);
+        if (!StringUtils.hasText(baseUrl)) {
+            return false;
+        }
+        return isOllamaReachable(baseUrl);
+    }
+
+    /**
+     * 只有 Ollama 真正可达时才注册 DeepSeek 本地模型，避免下拉框出现不可用选项
+     */
+    private boolean isOllamaReachable(String baseUrl) {
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(1))
+                    .build();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(baseUrl.replaceAll("/+$", "") + "/api/tags"))
+                    .timeout(java.time.Duration.ofSeconds(1))
+                    .GET()
+                    .build();
+            java.net.http.HttpResponse<Void> response = client.send(
+                    request, java.net.http.HttpResponse.BodyHandlers.discarding());
+            boolean reachable = response.statusCode() >= 200 && response.statusCode() < 500;
+            if (!reachable) {
+                log.warn("Ollama 不可用（HTTP {}），不注册 DeepSeek 本地模型", response.statusCode());
+            }
+            return reachable;
+        } catch (Exception e) {
+            log.warn("Ollama 未启动或不可达，不注册 DeepSeek 本地模型: {}", e.getMessage());
+            return false;
+        }
     }
 }

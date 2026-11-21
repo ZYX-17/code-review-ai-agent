@@ -8,7 +8,7 @@ import lombok.Data;
 public class CicdStatusResponse {
     private Long taskId;
     private String status; // RUNNING, COMPLETED, FAILED
-    private boolean passed; // 是否通过门禁
+    private Boolean passed; // 是否通过门禁；触发时为 null，状态查询时才有结果
     private String message;
     private String reportUrl;
     private Summary summary;
