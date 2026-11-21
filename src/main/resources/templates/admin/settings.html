@@ -66,6 +66,10 @@
                             <i class="fas fa-robot"></i>
                             <span>行为</span>
                         </a>
+                        <a href="#notification" class="submenu-item">
+                            <i class="fas fa-bell"></i>
+                            <span>通知</span>
+                        </a>
                         <a href="#import" class="submenu-item">
                             <i class="fas fa-file-import"></i>
                             <span>导入/导出</span>
@@ -210,6 +214,56 @@
                             <button type="button" class="btn" onclick="saveSettings()">保存行为配置</button>
                         </div>
 
+                        <!-- Notification Section -->
+                        <div id="notification" class="settings-section">
+                            <h3 class="section-title">审查通知</h3>
+                            <div class="form-text">审查完成或失败时推送到群机器人，支持企业微信、钉钉、飞书和自定义 Webhook。</div>
+
+                            <label class="checkbox-item">
+                                <input type="checkbox" id="notify-enabled" th:checked="${settings.notifyEnabled}"> 启用通知
+                            </label>
+
+                            <div class="select-row" style="margin-top: 16px;">
+                                <div style="display: flex; flex-direction: column; gap: 5px;">
+                                    <span class="form-label">通知渠道</span>
+                                    <select class="custom-select" id="notify-channel">
+                                        <option value="wecom" th:selected="${settings.notifyChannel == 'wecom'}">企业微信机器人</option>
+                                        <option value="dingtalk" th:selected="${settings.notifyChannel == 'dingtalk'}">钉钉机器人</option>
+                                        <option value="feishu" th:selected="${settings.notifyChannel == 'feishu'}">飞书机器人</option>
+                                        <option value="custom" th:selected="${settings.notifyChannel == 'custom'}">自定义 Webhook</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 12px;">
+                                <label class="form-label">Webhook 地址</label>
+                                <input type="text" class="input-dark" id="notify-webhook-url" style="width: 100%; padding: 8px;"
+                                       placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+                                       th:value="${settings.notifyWebhookUrl}">
+                            </div>
+
+                            <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 12px;">
+                                <label class="form-label">加签密钥（仅钉钉需要，可选）</label>
+                                <input type="password" class="input-dark" id="notify-secret" style="width: 100%; padding: 8px;"
+                                       placeholder="钉钉机器人安全设置中的加签密钥"
+                                       th:value="${settings.notifySecret}">
+                            </div>
+
+                            <div style="display: flex; gap: 18px; margin-top: 14px;">
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="notify-on-success" th:checked="${settings.notifyOnSuccess}"> 审查完成时通知
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="notify-on-failure" th:checked="${settings.notifyOnFailure}"> 审查失败时通知
+                                </label>
+                            </div>
+
+                            <div style="display: flex; gap: 10px; margin-top: 16px;">
+                                <button type="button" class="btn btn-primary" onclick="saveSettings()">保存通知配置</button>
+                                <button type="button" class="btn" onclick="saveAndTestNotification()">保存并发送测试</button>
+                            </div>
+                        </div>
+
                         <!-- Import/Export Section -->
                         <div id="import" class="settings-section">
                             <h3 class="section-title">导入/导出</h3>
@@ -341,10 +395,17 @@
                 ringThickness: parseInt(document.getElementById('vis-ring-thickness').value),
                 
                 maxIssues: parseInt(document.getElementById('behavior-max-issues').value),
-                animationInterval: parseInt(document.getElementById('behavior-animation').value)
+                animationInterval: parseInt(document.getElementById('behavior-animation').value),
+
+                notifyEnabled: document.getElementById('notify-enabled').checked,
+                notifyChannel: document.getElementById('notify-channel').value,
+                notifyWebhookUrl: document.getElementById('notify-webhook-url').value.trim(),
+                notifySecret: document.getElementById('notify-secret').value,
+                notifyOnSuccess: document.getElementById('notify-on-success').checked,
+                notifyOnFailure: document.getElementById('notify-on-failure').checked
             };
 
-            fetch('/admin/settings/save', {
+            return fetch('/admin/settings/save', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -355,14 +416,43 @@
             .then(result => {
                 if (result.success) {
                     alert('设置已保存！');
+                    return true;
                 } else {
                     alert('保存失败: ' + result.message);
+                    return false;
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
                 alert('保存出错，请查看控制台');
+                return false;
             });
+        }
+
+        // 保存并发送测试通知
+        function saveAndTestNotification() {
+            saveSettings().then(saved => {
+                if (saved) {
+                    testNotification();
+                }
+            });
+        }
+
+        // 发送测试通知
+        function testNotification() {
+            fetch('/admin/settings/notify/test', { method: 'POST' })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        alert('测试通知已发送，请查看群消息');
+                    } else {
+                        alert('发送失败: ' + result.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('发送测试通知出错，请查看控制台');
+                });
         }
 
         // Reset Settings

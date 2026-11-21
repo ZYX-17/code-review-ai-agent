@@ -10,6 +10,7 @@ import com.codeguardian.repository.FindingRepository;
 import com.codeguardian.repository.ReviewReportRepository;
 import com.codeguardian.repository.ReviewTaskRepository;
 import com.codeguardian.service.cache.SemanticFingerprintCacheService;
+import com.codeguardian.service.notification.ReviewNotificationService;
 import com.codeguardian.service.rules.RuleEngineService;
 import com.codeguardian.enums.ReviewTypeEnum;
 import com.codeguardian.enums.SeverityEnum;
@@ -54,6 +55,7 @@ public class ReviewService {
     private final SystemConfigService configService;
     private final GitService gitService;
     private final SemanticFingerprintCacheService fingerprintCacheService;
+    private final ReviewNotificationService notificationService;
     
     private final ExecutorService executor = Executors.newFixedThreadPool(20);
     private final ExecutorService orchestrationExecutor = Executors.newCachedThreadPool();
@@ -161,6 +163,9 @@ public class ReviewService {
             task.setErrorMessage(e.getMessage());
         } finally {
             taskRepository.save(task);
+            if (notificationService != null) {
+                notificationService.notifyAsync(task);
+            }
         }
     }
 

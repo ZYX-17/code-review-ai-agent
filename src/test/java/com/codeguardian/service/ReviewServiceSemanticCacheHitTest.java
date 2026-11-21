@@ -59,7 +59,8 @@ public class ReviewServiceSemanticCacheHitTest {
                 ruleEngineService,
                 configService,
                 gitService,
-                fingerprintCacheService
+                fingerprintCacheService,
+                null
         );
 
         ReviewRequestDTO request = ReviewRequestDTO.builder()

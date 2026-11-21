@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +31,12 @@ public class SystemConfigService {
     public static final String KEY_BEHAVIOR_MAX_ISSUES = "behavior.max_issues";
     public static final String KEY_BEHAVIOR_ANIMATION = "behavior.animation_interval";
     public static final String KEY_METRICS_DASHBOARD = "metrics.dashboard";
+    public static final String KEY_NOTIFY_ENABLED = "notify.enabled";
+    public static final String KEY_NOTIFY_CHANNEL = "notify.channel";
+    public static final String KEY_NOTIFY_WEBHOOK_URL = "notify.webhook_url";
+    public static final String KEY_NOTIFY_SECRET = "notify.secret";
+    public static final String KEY_NOTIFY_ON_SUCCESS = "notify.on_success";
+    public static final String KEY_NOTIFY_ON_FAILURE = "notify.on_failure";
     
     public static final String PREFIX_RULE_CAT = "rules.category.";
     public static final String PREFIX_RULE_WEIGHT = "rules.weight.";
@@ -52,6 +59,13 @@ public class SystemConfigService {
         dto.setRingThickness(parseInt(configMap.get(KEY_VIS_RING_THICKNESS), 20));
         dto.setMaxIssues(parseInt(configMap.get(KEY_BEHAVIOR_MAX_ISSUES), 100));
         dto.setAnimationInterval(parseInt(configMap.get(KEY_BEHAVIOR_ANIMATION), 600));
+
+        dto.setNotifyEnabled(parseBoolean(configMap.get(KEY_NOTIFY_ENABLED), false));
+        dto.setNotifyChannel(configMap.getOrDefault(KEY_NOTIFY_CHANNEL, "wecom"));
+        dto.setNotifyWebhookUrl(configMap.getOrDefault(KEY_NOTIFY_WEBHOOK_URL, ""));
+        dto.setNotifySecret(configMap.getOrDefault(KEY_NOTIFY_SECRET, ""));
+        dto.setNotifyOnSuccess(parseBoolean(configMap.get(KEY_NOTIFY_ON_SUCCESS), true));
+        dto.setNotifyOnFailure(parseBoolean(configMap.get(KEY_NOTIFY_ON_FAILURE), true));
 
         Map<String, Boolean> ruleCategories = new HashMap<>();
         Map<String, Integer> ruleWeights = new HashMap<>();
@@ -114,6 +128,16 @@ public class SystemConfigService {
         saveConfig(KEY_BEHAVIOR_MAX_ISSUES, String.valueOf(dto.getMaxIssues()), "Behavior", "Max Issues");
         saveConfig(KEY_BEHAVIOR_ANIMATION, String.valueOf(dto.getAnimationInterval()), "Behavior", "Animation Interval");
 
+        saveConfig(KEY_NOTIFY_ENABLED, String.valueOf(Boolean.TRUE.equals(dto.getNotifyEnabled())),
+                "Notification", "Review Notification Enabled");
+        saveConfig(KEY_NOTIFY_CHANNEL, dto.getNotifyChannel(), "Notification", "Notification Channel");
+        saveConfig(KEY_NOTIFY_WEBHOOK_URL, dto.getNotifyWebhookUrl(), "Notification", "Notification Webhook URL");
+        saveConfig(KEY_NOTIFY_SECRET, dto.getNotifySecret(), "Notification", "Notification Secret");
+        saveConfig(KEY_NOTIFY_ON_SUCCESS, String.valueOf(!Boolean.FALSE.equals(dto.getNotifyOnSuccess())),
+                "Notification", "Notify On Success");
+        saveConfig(KEY_NOTIFY_ON_FAILURE, String.valueOf(!Boolean.FALSE.equals(dto.getNotifyOnFailure())),
+                "Notification", "Notify On Failure");
+
         if (dto.getRuleCategories() != null) {
             dto.getRuleCategories().forEach((cat, enabled) -> 
                 saveConfig(PREFIX_RULE_CAT + cat, String.valueOf(enabled), "Rules", "Category Enabled: " + cat));
@@ -140,6 +164,12 @@ public class SystemConfigService {
         defaults.setRingThickness(20);
         defaults.setMaxIssues(100);
         defaults.setAnimationInterval(600);
+        defaults.setNotifyEnabled(false);
+        defaults.setNotifyChannel("wecom");
+        defaults.setNotifyWebhookUrl("");
+        defaults.setNotifySecret("");
+        defaults.setNotifyOnSuccess(true);
+        defaults.setNotifyOnFailure(true);
 
         Map<String, Boolean> categories = new HashMap<>();
         Map<String, Integer> weights = new HashMap<>();
@@ -173,6 +203,17 @@ public class SystemConfigService {
                     throw new IllegalArgumentException("规则权重必须在 0 到 100 之间");
                 }
             }
+        }
+        if (dto.getNotifyChannel() != null
+                && !Set.of("wecom", "dingtalk", "feishu", "custom").contains(dto.getNotifyChannel())) {
+            throw new IllegalArgumentException("不支持的通知渠道: " + dto.getNotifyChannel());
+        }
+        String notifyUrl = dto.getNotifyWebhookUrl();
+        if (notifyUrl != null && !notifyUrl.isBlank() && !notifyUrl.matches("^https?://.+")) {
+            throw new IllegalArgumentException("通知 Webhook 地址必须以 http:// 或 https:// 开头");
+        }
+        if (Boolean.TRUE.equals(dto.getNotifyEnabled()) && (notifyUrl == null || notifyUrl.isBlank())) {
+            throw new IllegalArgumentException("启用通知时必须填写 Webhook 地址");
         }
     }
 

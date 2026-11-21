@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class ReviewServiceScopeFormattingTest {
 
     private String invokeDetermineScope(ReviewRequestDTO req) throws Exception {
-        ReviewService svc = new ReviewService(null, null, null, null, null, null, null, null, null);
+        ReviewService svc = new ReviewService(null, null, null, null, null, null, null, null, null, null);
         Method m = ReviewService.class.getDeclaredMethod("determineScope", ReviewRequestDTO.class);
         m.setAccessible(true);
         return (String) m.invoke(svc, req);

@@ -40,7 +40,7 @@ public class ReviewServiceGitScopeTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        reviewService = new ReviewService(taskRepository, findingRepository, null, aiModelService, codeParserService, ruleEngineService, configService, gitService, fingerprintCacheService);
+        reviewService = new ReviewService(taskRepository, findingRepository, null, aiModelService, codeParserService, ruleEngineService, configService, gitService, fingerprintCacheService, null);
     }
 
     @Test

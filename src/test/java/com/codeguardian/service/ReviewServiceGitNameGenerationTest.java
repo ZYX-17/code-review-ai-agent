@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ReviewServiceGitNameGenerationTest {
 
     private String invokeGenerate(ReviewRequestDTO req) throws Exception {
-        ReviewService svc = new ReviewService(null, null, null, null, null, null, null, null, null);
+        ReviewService svc = new ReviewService(null, null, null, null, null, null, null, null, null, null);
         Method m = ReviewService.class.getDeclaredMethod("generateTaskName", ReviewRequestDTO.class);
         m.setAccessible(true);
         return (String) m.invoke(svc, req);

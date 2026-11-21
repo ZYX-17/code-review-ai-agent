@@ -243,6 +243,19 @@ Webhook 触发的审查默认只审查本次变更的文件：
 获取不到变更列表（未配置 Token、API 失败或事件不含文件信息）时自动回退为全量审查。
 手动发起 `GIT` 类型审查时仍为全量审查，也可在请求体中传 `changedFiles` 指定范围。
 
+## 审查通知（可选）
+
+在「设置 → 通知」中配置，审查完成或失败时推送到群机器人：
+
+- 企业微信机器人：填写群机器人 Webhook
+- 钉钉机器人：填写 Webhook，可选填加签密钥
+- 飞书机器人：填写 Webhook
+- 自定义 Webhook：接收 JSON，包含 `event`、`taskId`、`taskName`、`status`、
+  `critical`/`high`/`medium`/`low`、`reportUrl` 和 `text`
+
+可分别控制完成/失败是否通知，点击「保存并发送测试」验证配置是否生效。
+设置报告的公网地址 `PUBLIC_BASE_URL` 后，通知中会附带报告链接。
+
 ## 项目结构
 
 ```

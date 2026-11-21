@@ -25,4 +25,12 @@ public class SettingsDTO {
     // Behavior
     private Integer maxIssues;
     private Integer animationInterval;
+
+    // Notification
+    private Boolean notifyEnabled;
+    private String notifyChannel;     // wecom, dingtalk, feishu, custom
+    private String notifyWebhookUrl;
+    private String notifySecret;      // 钉钉加签密钥（其他渠道可留空）
+    private Boolean notifyOnSuccess;
+    private Boolean notifyOnFailure;
 }

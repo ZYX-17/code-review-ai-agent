@@ -4,6 +4,7 @@ import com.codeguardian.annotation.OperationLogRecord;
 import com.codeguardian.model.dto.SettingsDTO;
 import com.codeguardian.dto.OperationResponseDTO;
 import com.codeguardian.service.SystemConfigService;
+import com.codeguardian.service.notification.ReviewNotificationService;
 import com.codeguardian.util.ViewModelUtils;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 public class SettingsController {
 
     private final SystemConfigService configService;
+    private final ReviewNotificationService notificationService;
 
     /**
      * 设置页面
@@ -69,6 +71,23 @@ public class SettingsController {
             return ResponseEntity.ok(OperationResponseDTO.success("已恢复默认设置"));
         } catch (Exception e) {
             log.error("Failed to reset settings", e);
+            return ResponseEntity.badRequest().body(OperationResponseDTO.error(e.getMessage()));
+        }
+    }
+
+    /**
+     * 发送测试通知（使用已保存的通知配置）
+     */
+    @PostMapping("/notify/test")
+    @ResponseBody
+    @SaCheckPermission("CONFIG")
+    @OperationLogRecord(module = "系统设置", action = "测试通知")
+    public ResponseEntity<OperationResponseDTO> testNotification() {
+        try {
+            notificationService.sendTest();
+            return ResponseEntity.ok(OperationResponseDTO.success("测试通知已发送"));
+        } catch (Exception e) {
+            log.warn("测试通知发送失败: {}", e.getMessage());
             return ResponseEntity.badRequest().body(OperationResponseDTO.error(e.getMessage()));
         }
     }
